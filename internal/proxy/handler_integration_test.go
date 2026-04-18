@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/psyb0t/aichteeteapee"
 	"github.com/psyb0t/proxq/internal/testinfra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,6 +155,186 @@ func TestHandler_ServeHTTP(t *testing.T) {
 	}
 }
 
+func TestHandler_ServeHTTP_WebSocketProxy(
+	t *testing.T,
+) {
+	upgraded := make(chan struct{})
+
+	upstream := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			if strings.EqualFold(
+				r.Header.Get(aichteeteapee.HeaderNameUpgrade), "websocket",
+			) {
+				close(upgraded)
+				w.WriteHeader(http.StatusSwitchingProtocols)
+
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer upstream.Close()
+
+	h := NewHandler(nil, HandlerConfig{
+		UpstreamURL: upstream.URL,
+	})
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/ws", nil,
+	)
+	req.Header.Set(
+		aichteeteapee.HeaderNameConnection, "upgrade",
+	)
+	req.Header.Set(
+		aichteeteapee.HeaderNameUpgrade, "websocket",
+	)
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	select {
+	case <-upgraded:
+	default:
+		t.Error("upstream did not receive WS upgrade")
+	}
+}
+
+func TestHandler_ServeHTTP_WebSocketNilProxy(
+	t *testing.T,
+) {
+	h := &Handler{
+		reverseProxy: nil,
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/ws", nil,
+	)
+	req.Header.Set(
+		aichteeteapee.HeaderNameConnection, "upgrade",
+	)
+	req.Header.Set(
+		aichteeteapee.HeaderNameUpgrade, "websocket",
+	)
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusBadGateway, rec.Code,
+	)
+}
+
+func TestHandler_ServeHTTP_DirectProxyChunked(
+	t *testing.T,
+) {
+	received := make(chan string, 1)
+
+	upstream := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			received <- r.Method + " " + r.URL.Path
+
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("proxied"))
+		}),
+	)
+	defer upstream.Close()
+
+	h := NewHandler(nil, HandlerConfig{
+		UpstreamURL: upstream.URL,
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost, "/upload", strings.NewReader("data"),
+	)
+	req.TransferEncoding = []string{"chunked"}
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "proxied", rec.Body.String())
+
+	select {
+	case got := <-received:
+		assert.Equal(t, "POST /upload", got)
+	default:
+		t.Error("upstream did not receive request")
+	}
+}
+
+func TestHandler_ServeHTTP_DirectProxyLargeBody(
+	t *testing.T,
+) {
+	received := make(chan bool, 1)
+
+	upstream := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			received <- true
+
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer upstream.Close()
+
+	h := NewHandler(nil, HandlerConfig{
+		UpstreamURL:          upstream.URL,
+		DirectProxyThreshold: 100,
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost, "/big",
+		strings.NewReader(strings.Repeat("x", 200)),
+	)
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	select {
+	case <-received:
+	default:
+		t.Error("upstream did not receive request")
+	}
+}
+
+func TestHandler_ServeHTTP_DirectProxyNilProxy(
+	t *testing.T,
+) {
+	h := &Handler{
+		reverseProxy:         nil,
+		directProxyThreshold: 100,
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost, "/big",
+		strings.NewReader(strings.Repeat("x", 200)),
+	)
+	req.ContentLength = 200
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusBadGateway, rec.Code,
+	)
+}
+
 func TestHandler_ServeHTTP_ReadBodyError(
 	t *testing.T,
 ) {
@@ -229,7 +410,7 @@ func TestJobsHandler_Integration(t *testing.T) {
 	taskID := info.ID
 
 	jobsHandler := NewJobsHandler(
-		inspector, queue, nil,
+		inspector, queue,
 	)
 
 	t.Run("get existing job", func(t *testing.T) {

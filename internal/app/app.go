@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -31,6 +33,15 @@ func Run() error {
 		os.Exit(1)
 	}
 
+	directProxyPaths, err := parseDirectProxyPaths(
+		cfg.DirectProxyPaths,
+	)
+	if err != nil {
+		return ctxerrors.Wrap(
+			err, "parse direct proxy paths",
+		)
+	}
+
 	ctx, stop := signal.NotifyContext(
 		context.Background(),
 		os.Interrupt, syscall.SIGTERM,
@@ -44,16 +55,12 @@ func Run() error {
 
 	cacheCfg, err := cache.ParseConfig()
 	if err != nil {
-		return ctxerrors.Wrap(
-			err, "parse cache config",
-		)
+		return ctxerrors.Wrap(err, "parse cache config")
 	}
 
 	jobCache, cleanup, err := cache.FromConfig(cacheCfg)
 	if err != nil {
-		return ctxerrors.Wrap(
-			err, "create cache from config",
-		)
+		return ctxerrors.Wrap(err, "create cache from config")
 	}
 
 	defer cleanup()
@@ -69,6 +76,7 @@ func Run() error {
 
 	err = startHTTPServer(
 		ctx, cfg, client, inspector,
+		directProxyPaths,
 	)
 
 	wg.Wait()
@@ -135,19 +143,22 @@ func buildRouter(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
+	directProxyPaths []*regexp.Regexp,
 ) *serbewr.Router {
 	proxyHandler := proxqproxy.NewHandler(
 		client,
 		proxqproxy.HandlerConfig{
-			UpstreamURL:        cfg.UpstreamURL,
-			MaxRequestBodySize: cfg.MaxBodySize,
-			Queue:              cfg.Queue,
-			TaskRetention:      cfg.TaskRetention,
+			UpstreamURL:          cfg.UpstreamURL,
+			MaxRequestBodySize:   cfg.MaxBodySize,
+			DirectProxyThreshold: cfg.DirectProxyThreshold,
+			DirectProxyPaths:     directProxyPaths,
+			Queue:                cfg.Queue,
+			TaskRetention:        cfg.TaskRetention,
 		},
 	)
 
 	jobsHandler := proxqproxy.NewJobsHandler(
-		inspector, cfg.Queue, slog.Default(),
+		inspector, cfg.Queue,
 	)
 
 	jobsPath := path.Join(cfg.JobsPath, "{id}")
@@ -188,17 +199,51 @@ func startHTTPServer(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
+	directProxyPaths []*regexp.Regexp,
 ) error {
-	srv, err := serbewr.New()
+	srv, err := serbewr.NewWithConfig(serbewr.Config{
+		ListenAddress: cfg.ListenAddress,
+	})
 	if err != nil {
 		return ctxerrors.Wrap(err, "create server")
 	}
 
-	router := buildRouter(cfg, client, inspector)
+	router := buildRouter(
+		cfg, client, inspector, directProxyPaths,
+	)
 
 	if err = srv.Start(ctx, router); err != nil {
 		return ctxerrors.Wrap(err, "start server")
 	}
 
 	return nil
+}
+
+func parseDirectProxyPaths(
+	raw string,
+) ([]*regexp.Regexp, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	patterns := make([]*regexp.Regexp, 0, len(parts))
+
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+
+		re, err := regexp.Compile(p)
+		if err != nil {
+			return nil, ctxerrors.Wrap(
+				err, "compile regex: "+p,
+			)
+		}
+
+		patterns = append(patterns, re)
+	}
+
+	return patterns, nil
 }

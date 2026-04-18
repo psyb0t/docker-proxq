@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"path"
 	"sync"
 	"time"
 
@@ -96,7 +97,7 @@ func Logger(opts ...LoggerOption) Middleware {
 				w http.ResponseWriter,
 				r *http.Request,
 			) {
-				if config.SkipPaths[r.URL.Path] {
+				if config.SkipPaths[path.Clean(r.URL.Path)] {
 					next.ServeHTTP(w, r)
 
 					return

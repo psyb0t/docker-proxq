@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"log/slog"
 	"testing"
 	"time"
 
@@ -10,14 +9,11 @@ import (
 )
 
 func TestNewWorker(t *testing.T) {
-	customLogger := slog.Default()
-
 	tests := []struct {
 		name          string
 		cfg           WorkerConfig
 		expectTimeout time.Duration
 		expectTTL     time.Duration
-		customLogger  bool
 	}{
 		{
 			name:          "all defaults",
@@ -29,11 +25,9 @@ func TestNewWorker(t *testing.T) {
 			cfg: WorkerConfig{
 				UpstreamTimeout: 10 * time.Second,
 				CacheTTL:        3 * time.Minute,
-				Logger:          customLogger,
 			},
 			expectTimeout: 10 * time.Second,
 			expectTTL:     3 * time.Minute,
-			customLogger:  true,
 		},
 	}
 
@@ -51,11 +45,6 @@ func TestNewWorker(t *testing.T) {
 				t, tt.expectTTL,
 				w.forwardCfg.CacheTTL,
 			)
-			assert.NotNil(t, w.logger)
-
-			if tt.customLogger {
-				assert.Equal(t, customLogger, w.logger)
-			}
 		})
 	}
 }

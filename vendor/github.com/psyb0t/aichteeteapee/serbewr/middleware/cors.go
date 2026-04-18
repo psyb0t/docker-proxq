@@ -90,7 +90,7 @@ func CORS(opts ...CORSOption) Middleware {
 		ExposedHeaders:   []string{},
 		MaxAge:           aichteeteapee.DefaultCORSMaxAge,
 		AllowCredentials: false,
-		AllowAllOrigins:  true, // Default behavior - allow all origins
+		AllowAllOrigins:  aichteeteapee.GetDefaultCORSAllowAllOrigins(),
 	}
 
 	for _, opt := range opts {

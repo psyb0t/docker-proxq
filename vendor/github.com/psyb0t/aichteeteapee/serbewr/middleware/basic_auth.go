@@ -2,9 +2,11 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"maps"
 	"net/http"
+	"path"
 
 	"github.com/psyb0t/aichteeteapee"
 	"github.com/psyb0t/common-go/slogging"
@@ -112,7 +114,7 @@ func BasicAuth(opts ...BasicAuthOption) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip authentication for specified paths
-			if config.SkipPaths[r.URL.Path] {
+			if config.SkipPaths[path.Clean(r.URL.Path)] {
 				next.ServeHTTP(w, r)
 
 				return
@@ -181,9 +183,12 @@ func constantTimeAuth(users map[string]string, user, pass string) bool {
 		expectedPassword = "dummy-password-to-prevent-timing-attack"
 	}
 
+	expectedHash := sha256.Sum256([]byte(expectedPassword))
+	providedHash := sha256.Sum256([]byte(pass))
+
 	passwordMatch := subtle.ConstantTimeCompare(
-		[]byte(pass),
-		[]byte(expectedPassword),
+		expectedHash[:],
+		providedHash[:],
 	) == 1
 
 	return exists && passwordMatch

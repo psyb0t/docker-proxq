@@ -1,5 +1,8 @@
 # proxq
 
+[![Docker Hub](https://img.shields.io/docker/pulls/psyb0t/proxq?style=flat-square)](https://hub.docker.com/r/psyb0t/proxq)
+[![Go Reference](https://pkg.go.dev/badge/github.com/psyb0t/proxq.svg)](https://pkg.go.dev/github.com/psyb0t/proxq)
+
 The honey badger of HTTP proxies. Takes your request, throws it in a Redis-backed job queue, and deals with it when it damn well pleases. You get a job ID back instantly — come back later to pick up the goods.
 
 Think of it as "I'll get back to you" as a service. Every HTTP request becomes an async job. No more hanging connections, no more timeouts, no more "please hold." Fire and forget, poll when ready.
@@ -19,6 +22,7 @@ Oh, and it caches too. Because hitting the same endpoint twice is for people who
   - [Send a request](#send-a-request-any-method-any-path)
   - [Poll for result](#poll-for-result)
   - [Cancel a job](#cancel-a-job)
+- [Direct proxy bypass](#direct-proxy-bypass)
 - [Architecture](#architecture)
 - [Development](#development)
 - [License](#license)
@@ -26,20 +30,25 @@ Oh, and it caches too. Because hitting the same endpoint twice is for people who
 ## What it actually does
 
 ```
-You                       proxq                      Redis                    Your API
- |                          |                          |                        |
- |-- GET /api/slow-af ----->|                          |                        |
- |<-- 202 {jobId} ----------|                          |                        |
- |                          |-- "deal with this" ----->|                        |
- |   (go do something      |                          |-- worker wakes up ---->|
- |    useful with your      |                          |                        |
- |    life)                 |                          |<-- finally responds ---|
- |                          |                          |                        |
- |-- GET {PROXQ_JOBS_PATH}/{id} ----->|                          |                        |
- |<-- here's your shit -----|                          |                        |
+You              proxq            Redis          Your API
+ |                 |                 |               |
+ |-- POST /foo --> |                 |               |
+ |<- 202 {jobId} - |                 |               |
+ |                 |-- enqueue ----> |               |
+ |  (go touch      |                 |               |
+ |   grass)        |                 | <- worker --- |
+ |                 |                 |    wakes up   |
+ |                 |                 | -----------> (upstream call)
+ |                 |                 | <----------- (response)
+ |                 |                 |               |
+ |-- GET /{jobId}->|                 |               |
+ |<- {result} ---- |                 |               |
+ |                 |                 |               |
+ |-- PUT /big ---> | --------- direct proxy ------> |
+ |<- {response} -- | <----------------------------- |
 ```
 
-Every request goes through the meat grinder:
+Most requests go through the meat grinder:
 
 1. **Accept** — proxq takes your HTTP request (any method, any path, any body)
 2. **Queue** — shoves it into Redis via [asynq](https://github.com/hibiken/asynq) and immediately hands you a job ID
@@ -49,15 +58,26 @@ Every request goes through the meat grinder:
 
 Hop-by-hop headers get stripped per RFC 2616 because we're civilized like that.
 
+**Large uploads and chunked transfers** bypass the queue entirely and get proxied straight to upstream — no buffering, no double transfer, no memory bomb. WebSocket connections also get proxied directly.
+
 ## Quick start
 
-```bash
-docker run \
-  -e PROXQ_UPSTREAM_URL=http://your-api:3000 \
-  -e PROXQ_REDIS_ADDR=redis:6379 \
-  -e HTTP_SERVER_LISTENADDRESS=0.0.0.0:8080 \
-  -p 8080:8080 \
-  psyb0t/proxq
+```yaml
+services:
+  proxq:
+    image: psyb0t/proxq
+    ports:
+      - "8080:8080"
+    environment:
+      PROXQ_UPSTREAM_URL: http://your-api:3000
+      PROXQ_REDIS_ADDR: redis:6379
+      PROXQ_LISTENADDRESS: 0.0.0.0:8080
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
 ```
 
 That's it. Your API is now async. You're welcome.
@@ -83,7 +103,9 @@ Everything's an env var. No YAML, no TOML, no config files to lose in production
 | `PROXQ_QUEUE` | `default` | asynq queue name |
 | `PROXQ_UPSTREAM_TIMEOUT` | `5m` | How long to wait for upstream before giving up on life |
 | `PROXQ_TASK_RETENTION` | `1h` | How long completed jobs stick around in Redis |
-| `PROXQ_MAX_REQUEST_BODY_SIZE` | `10485760` | 10MB. Enough for most sins. |
+| `PROXQ_MAX_REQUEST_BODY_SIZE` | `10485760` | 10MB. Max body size for queued requests. |
+| `PROXQ_DIRECT_PROXY_THRESHOLD` | `10485760` | Requests with `Content-Length` above this bypass the queue and get proxied directly to upstream. Chunked transfers always bypass. Set to `0` to disable. |
+| `PROXQ_DIRECT_PROXY_PATHS` | | Comma-separated regexes. Requests matching any pattern bypass the queue. Example: `^/uploads,^/ws,^/stream` |
 | `PROXQ_JOBS_PATH` | `/__jobs` | Base path for the jobs API. All examples in this doc use the default — yours will differ if you change it. |
 
 ### Caching
@@ -108,13 +130,13 @@ Cache rules:
 
 | Variable | Default |
 |---|---|
-| `HTTP_SERVER_LISTENADDRESS` | `127.0.0.1:8080` |
+| `PROXQ_LISTENADDRESS` | `127.0.0.1:8080` |
 
 ## API
 
 ### Send a request (any method, any path)
 
-Anything that doesn't match `PROXQ_JOBS_PATH` (default `/__jobs`) gets intercepted and queued.
+Anything that doesn't match `PROXQ_JOBS_PATH` (default `/__jobs`) gets intercepted and queued — unless it triggers [direct proxy bypass](#direct-proxy-bypass).
 
 ```
 POST /api/heavy-computation HTTP/1.1
@@ -156,6 +178,17 @@ DELETE {PROXQ_JOBS_PATH}/550e8400-e29b-41d4-a716-446655440000
 → 200 {"status": "cancelled"}
 → 404 (already gone or never existed)
 ```
+
+## Direct proxy bypass
+
+Not everything needs the queue. These requests skip it entirely and get proxied straight to upstream — single transfer, no buffering, synchronous response:
+
+- **Path rules** (`PROXQ_DIRECT_PROXY_PATHS`) — comma-separated regexes matched against the request path. Example: `^/uploads,^/ws,^/stream`
+- **Chunked transfers** (`Transfer-Encoding: chunked`) — size unknown, could be huge. Always bypassed.
+- **Large bodies** (`Content-Length` > `PROXQ_DIRECT_PROXY_THRESHOLD`) — no point buffering a 1GB ISO into Redis.
+- **WebSocket connections** (`Connection: upgrade` + `Upgrade: websocket`) — persistent bidirectional, obviously can't queue these.
+
+The client gets the upstream response directly instead of a job ID. Set `PROXQ_DIRECT_PROXY_THRESHOLD=0` to disable the body size check (chunked and WebSocket bypass still applies).
 
 ## Architecture
 

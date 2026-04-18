@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,41 +10,29 @@ import (
 )
 
 func TestNewJobsHandler(t *testing.T) {
-	customLogger := slog.Default()
-
 	tests := []struct {
-		name         string
-		queue        string
-		logger       *slog.Logger
-		expectQueue  string
-		customLogger bool
+		name        string
+		queue       string
+		expectQueue string
 	}{
 		{
-			name:        "all defaults",
+			name:        "default queue",
 			queue:       "",
-			logger:      nil,
 			expectQueue: DefaultQueue,
 		},
 		{
-			name:         "custom values",
-			queue:        "custom",
-			logger:       customLogger,
-			expectQueue:  "custom",
-			customLogger: true,
+			name:        "custom queue",
+			queue:       "custom",
+			expectQueue: "custom",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewJobsHandler(nil, tt.queue, tt.logger)
+			h := NewJobsHandler(nil, tt.queue)
 
 			require.NotNil(t, h)
 			assert.Equal(t, tt.expectQueue, h.queue)
-			assert.NotNil(t, h.logger)
-
-			if tt.customLogger {
-				assert.Equal(t, customLogger, h.logger)
-			}
 		})
 	}
 }
@@ -83,7 +70,9 @@ func TestExtractJobID(t *testing.T) {
 			req := httptest.NewRequest(
 				http.MethodGet, tt.path, nil,
 			)
-			assert.Equal(t, tt.expected, extractJobID(req))
+			assert.Equal(
+				t, tt.expected, extractJobID(req),
+			)
 		})
 	}
 }
@@ -110,7 +99,7 @@ func TestExtractJobID_PathValue(t *testing.T) {
 }
 
 func TestJobsHandler_EmptyID(t *testing.T) {
-	h := NewJobsHandler(nil, "default", nil)
+	h := NewJobsHandler(nil, "default")
 
 	tests := []struct {
 		name    string

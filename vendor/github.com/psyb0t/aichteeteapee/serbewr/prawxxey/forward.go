@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -14,7 +15,14 @@ import (
 	"github.com/psyb0t/ctxerrors"
 )
 
-const defaultCacheTTL = 5 * time.Minute
+var errResponseBodyTooLarge = errors.New(
+	"upstream response body exceeds maximum size",
+)
+
+const (
+	defaultCacheTTL            = 5 * time.Minute
+	defaultMaxResponseBodySize = 100 << 20 // 100MB
+)
 
 // hop-by-hop headers (RFC 2616 section 13.5.1).
 //
@@ -36,6 +44,7 @@ type ForwardConfig struct {
 	CacheTTL               time.Duration
 	CacheKeyFn             func(p *RequestPayload) string
 	CacheKeyExcludeHeaders map[string]struct{}
+	MaxResponseBodySize    int64
 }
 
 func ForwardRequest(
@@ -55,7 +64,12 @@ func ForwardRequest(
 		return forwardWithCache(ctx, cfg, payload)
 	}
 
-	return doUpstreamRequest(ctx, cfg.HTTPClient, payload)
+	maxSize := cfg.MaxResponseBodySize
+	if maxSize <= 0 {
+		maxSize = defaultMaxResponseBodySize
+	}
+
+	return doUpstreamRequest(ctx, cfg.HTTPClient, payload, maxSize)
 }
 
 func forwardWithCache(
@@ -69,8 +83,13 @@ func forwardWithCache(
 		return result, nil
 	}
 
+	maxSize := cfg.MaxResponseBodySize
+	if maxSize <= 0 {
+		maxSize = defaultMaxResponseBodySize
+	}
+
 	result, err := doUpstreamRequest(
-		ctx, cfg.HTTPClient, payload,
+		ctx, cfg.HTTPClient, payload, maxSize,
 	)
 	if err != nil {
 		return nil, err
@@ -157,6 +176,7 @@ func doUpstreamRequest(
 	ctx context.Context,
 	httpClient *http.Client,
 	payload *RequestPayload,
+	maxResponseBodySize int64,
 ) (*ResponseResult, error) {
 	start := time.Now()
 
@@ -183,10 +203,19 @@ func doUpstreamRequest(
 		_ = resp.Body.Close()
 	}()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(
+		io.LimitReader(resp.Body, maxResponseBodySize+1),
+	)
 	if err != nil {
 		return nil, ctxerrors.Wrap(
 			err, "read response body",
+		)
+	}
+
+	if int64(len(respBody)) > maxResponseBodySize {
+		return nil, ctxerrors.Wrap(
+			errResponseBodyTooLarge,
+			"read response body",
 		)
 	}
 

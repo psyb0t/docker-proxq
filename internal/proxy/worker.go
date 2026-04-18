@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -19,23 +18,16 @@ type WorkerConfig struct {
 	UpstreamTimeout time.Duration
 	Cache           cache.Cache
 	CacheTTL        time.Duration
-	Logger          *slog.Logger
 }
 
 type Worker struct {
 	forwardCfg prawxxey.ForwardConfig
-	logger     *slog.Logger
 }
 
 func NewWorker(cfg WorkerConfig) *Worker {
 	timeout := cfg.UpstreamTimeout
 	if timeout == 0 {
 		timeout = defaultUpstreamTimeout
-	}
-
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
 	}
 
 	return &Worker{
@@ -46,7 +38,6 @@ func NewWorker(cfg WorkerConfig) *Worker {
 			Cache:    cfg.Cache,
 			CacheTTL: cfg.CacheTTL,
 		},
-		logger: logger,
 	}
 }
 

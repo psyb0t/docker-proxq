@@ -2,7 +2,9 @@ package aichteeteapee
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -91,9 +93,56 @@ func GetDefaultCORSAllowHeaders() string {
 	}, ", ")
 }
 
-// GetDefaultWebSocketCheckOrigin is the default origin checker for WebSocket
-// connections. WARNING: This allows all origins - configure for your security
-// needs in production.
-func GetDefaultWebSocketCheckOrigin(_ *http.Request) bool {
+//nolint:gochecknoglobals
+var devMode atomic.Bool
+
+// FuckSecurity enables permissive defaults for quick local development.
+// CORS allows all origins, WebSocket accepts any origin, etc.
+// Call UnfuckSecurity() to restore secure defaults.
+func FuckSecurity() {
+	devMode.Store(true)
+}
+
+// UnfuckSecurity restores secure defaults after FuckSecurity.
+func UnfuckSecurity() {
+	devMode.Store(false)
+}
+
+// IsDevMode returns true if FuckSecurity was called.
+func IsDevMode() bool {
+	return devMode.Load()
+}
+
+// GetDefaultCORSAllowAllOrigins returns whether CORS should allow all origins.
+// Secure default: false. Dev mode: true.
+func GetDefaultCORSAllowAllOrigins() bool {
+	return devMode.Load()
+}
+
+// GetDefaultWebSocketCheckOrigin returns the default origin checker for
+// WebSocket connections. Secure default: validates Origin matches request Host.
+// Dev mode: allows all origins.
+func GetDefaultWebSocketCheckOrigin(r *http.Request) bool {
+	if devMode.Load() {
+		return true
+	}
+
+	origin := r.Header.Get(HeaderNameOrigin)
+	if origin == "" {
+		return true
+	}
+
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(u.Host, r.Host)
+}
+
+// GetPermissiveWebSocketCheckOrigin always allows all origins.
+// Use with WithUpgradeHandlerCheckOrigin when you need to bypass origin
+// validation for a specific handler without enabling global dev mode.
+func GetPermissiveWebSocketCheckOrigin(_ *http.Request) bool {
 	return true
 }

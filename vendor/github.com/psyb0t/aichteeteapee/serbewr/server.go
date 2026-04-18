@@ -49,21 +49,32 @@ func newFileCache() *fileCache {
 func (fc *fileCache) get(
 	path string,
 ) (bool, bool, bool) {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
+	fc.mu.RLock()
 
 	entry, exists := fc.cache[path]
 	if !exists {
+		fc.mu.RUnlock()
+
 		return false, false, false
 	}
 
 	// Check if entry is expired
 	if time.Since(entry.timestamp) > fc.ttl {
-		// Clean up expired entry
-		delete(fc.cache, path)
+		fc.mu.RUnlock()
+
+		// Write lock to delete; re-check to avoid TOCTOU
+		fc.mu.Lock()
+		defer fc.mu.Unlock()
+
+		entry, exists = fc.cache[path]
+		if exists && time.Since(entry.timestamp) > fc.ttl {
+			delete(fc.cache, path)
+		}
 
 		return false, false, false
 	}
+
+	defer fc.mu.RUnlock()
 
 	return true, entry.exists, entry.isDir
 }
@@ -76,9 +87,22 @@ func (fc *fileCache) set(
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	// If cache is full, clear it (simple eviction)
+	// If cache is full, evict the oldest single entry instead of clearing all
 	if len(fc.cache) >= fc.maxSize {
-		fc.cache = make(map[string]fileCacheEntry)
+		var oldestKey string
+
+		var oldestTime time.Time
+
+		for k, v := range fc.cache {
+			if oldestKey == "" || v.timestamp.Before(oldestTime) {
+				oldestKey = k
+				oldestTime = v.timestamp
+			}
+		}
+
+		if oldestKey != "" {
+			delete(fc.cache, oldestKey)
+		}
 	}
 
 	fc.cache[path] = fileCacheEntry{
@@ -316,7 +340,31 @@ func (s *Server) validateAndBuildPath(
 	}
 
 	// Build the full file path using proper path joining
-	return filepath.Join(staticDir, cleanPath), true
+	fullPath := filepath.Join(staticDir, cleanPath)
+
+	// Resolve symlinks to prevent symlink-based traversal bypasses.
+	// Resolve staticDir first; fall back to original value if it fails.
+	resolvedDir, err := filepath.EvalSymlinks(staticDir)
+	if err != nil {
+		resolvedDir = staticDir
+	}
+
+	// Resolve fullPath; if it fails (e.g. file doesn't exist yet), skip the
+	// symlink check — the file-existence check downstream will return 404.
+	resolvedFull, err := filepath.EvalSymlinks(fullPath)
+	if err == nil {
+		if !strings.HasPrefix(resolvedFull, resolvedDir) {
+			aichteeteapee.WriteJSON(
+				w,
+				http.StatusForbidden,
+				aichteeteapee.ErrorResponsePathTraversalDenied,
+			)
+
+			return "", false
+		}
+	}
+
+	return fullPath, true
 }
 
 // checkFileAccess checks file existence and permissions using cache

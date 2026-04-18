@@ -31,6 +31,8 @@ func (s *Server) HealthHandler(
 }
 
 // EchoHandler echoes back request information (useful for testing).
+//
+//nolint:funlen // Header filtering adds necessary length
 func (s *Server) EchoHandler(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -60,11 +62,31 @@ func (s *Server) EchoHandler(
 		}
 	}
 
+	canon := http.CanonicalHeaderKey
+
+	sensitiveHeaders := map[string]struct{}{
+		canon(aichteeteapee.HeaderNameAuthorization):      {},
+		canon(aichteeteapee.HeaderNameCookie):             {},
+		canon(aichteeteapee.HeaderNameSetCookie):          {},
+		canon(aichteeteapee.HeaderNameXAPIKey):            {},
+		canon(aichteeteapee.HeaderNameProxyAuthorization): {},
+	}
+
+	filteredHeaders := make(http.Header, len(r.Header))
+
+	for k, v := range r.Header {
+		if _, blocked := sensitiveHeaders[k]; blocked {
+			continue
+		}
+
+		filteredHeaders[k] = v
+	}
+
 	response := map[string]any{
 		"method":  r.Method,
 		"path":    r.URL.Path,
 		"query":   r.URL.Query(),
-		"headers": r.Header,
+		"headers": filteredHeaders,
 		"body":    body,
 	}
 
@@ -92,6 +114,8 @@ type FileUploadPostprocessor func(
 type FilenamePrependType uint8
 
 const (
+	uploadFilePermissions = 0o600
+
 	// FilenamePrependTypeNone does not add any prefix to the filename.
 	FilenamePrependTypeNone FilenamePrependType = iota
 	// FilenamePrependTypeDateTime prepends date and time in Y_M_D_H_I_S format.
@@ -222,23 +246,12 @@ func (s *Server) handleFileUpload(
 		return err
 	}
 
-	// Get absolute path for response
-	absolutePath, err := filepath.Abs(filePath)
-	if err != nil {
-		s.logger.Warn("Failed to get absolute path, using relative path",
-			"error", err,
-			"path", filePath,
-		)
-
-		absolutePath = filePath
-	}
-
 	response := map[string]any{
 		"status":            "success",
 		"original_filename": handler.Filename,
 		"saved_filename":    uniqueFilename,
 		"size":              handler.Size,
-		"path":              absolutePath,
+		"path":              uniqueFilename,
 	}
 
 	// Apply postprocessor if configured
@@ -272,7 +285,11 @@ func (s *Server) saveUploadedFile(
 	src io.Reader,
 	filePath string,
 ) error {
-	dst, err := os.Create(filePath)
+	dst, err := os.OpenFile(
+		filePath,
+		os.O_WRONLY|os.O_CREATE|os.O_EXCL,
+		uploadFilePermissions,
+	)
 	if err != nil {
 		s.logger.Error("Failed to create destination file",
 			"error", err,
@@ -304,6 +321,8 @@ func (s *Server) generateUniqueFilename(
 	originalFilename string,
 	prependType FilenamePrependType,
 ) string {
+	originalFilename = filepath.Base(originalFilename)
+
 	switch prependType {
 	case FilenamePrependTypeNone:
 		return originalFilename

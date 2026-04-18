@@ -5,11 +5,12 @@ go 1.26
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
-	github.com/psyb0t/aichteeteapee v1.4.0
+	github.com/psyb0t/aichteeteapee v1.5.0
 	github.com/psyb0t/common-go v0.0.0-20260417235224-ecff9486d757
 	github.com/psyb0t/ctxerrors v0.2.3
 	github.com/psyb0t/gonfiguration v1.5.0
 	github.com/psyb0t/slog-configurator v1.0.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0
 )
 
@@ -217,7 +218,6 @@ require (
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.3.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/testcontainers/testcontainers-go v0.42.0 // indirect
 	github.com/tetafro/godot v1.5.4 // indirect

@@ -3,30 +3,24 @@ package proxy
 import (
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee"
 	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
+	"github.com/psyb0t/common-go/slogging"
 )
 
 type JobsHandler struct {
 	inspector *asynq.Inspector
 	queue     string
-	logger    *slog.Logger
 }
 
 func NewJobsHandler(
 	inspector *asynq.Inspector,
 	queue string,
-	logger *slog.Logger,
 ) *JobsHandler {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	if queue == "" {
 		queue = DefaultQueue
 	}
@@ -34,7 +28,6 @@ func NewJobsHandler(
 	return &JobsHandler{
 		inspector: inspector,
 		queue:     queue,
-		logger:    logger,
 	}
 }
 
@@ -67,7 +60,8 @@ func (h *JobsHandler) Get(
 	}
 
 	if err != nil {
-		h.logger.Error(
+		logger := slogging.GetLogger(r.Context())
+		logger.Error(
 			"failed to get task info",
 			"job_id", id,
 			"error", err,
@@ -113,10 +107,12 @@ func (h *JobsHandler) Cancel(
 		return
 	}
 
+	logger := slogging.GetLogger(r.Context())
+
 	if err := h.inspector.CancelProcessing(
 		id,
 	); err != nil {
-		h.logger.Debug(
+		logger.Debug(
 			"cancel processing failed",
 			"job_id", id,
 			"error", err,
@@ -135,7 +131,7 @@ func (h *JobsHandler) Cancel(
 	}
 
 	if err != nil {
-		h.logger.Error(
+		logger.Error(
 			"failed to delete task",
 			"job_id", id,
 			"error", err,
