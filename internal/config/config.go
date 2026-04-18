@@ -12,7 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-
 const (
 	DefaultListenAddress              = "127.0.0.1:8080"
 	DefaultRedisAddr                  = "127.0.0.1:6379"
