@@ -28,6 +28,8 @@ upstreams:
   - prefix: "/api"
     url: "http://api-server:3000"
     timeout: "5m"
+    maxRetries: 0
+    retryDelay: "30s"               # fixed delay between retries (0 = exponential backoff)
     maxBodySize: 10485760
     directProxyThreshold: 10485760
     directProxyMode: "proxy"   # proxy or redirect

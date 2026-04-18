@@ -97,6 +97,8 @@ type Upstream struct {
 	Prefix               string           `yaml:"prefix"`
 	URL                  string           `yaml:"url"`
 	Timeout              Duration         `yaml:"timeout"`
+	MaxRetries           int              `yaml:"maxRetries"`
+	RetryDelay           Duration         `yaml:"retryDelay"`
 	MaxBodySize          int64            `yaml:"maxBodySize"`
 	DirectProxyThreshold int64            `yaml:"directProxyThreshold"` //nolint:lll
 	DirectProxyMode      string           `yaml:"directProxyMode"`

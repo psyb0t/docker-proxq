@@ -38,12 +38,14 @@ func TestWorker_ProcessTask_UpstreamError(
 ) {
 	w := NewWorker(WorkerConfig{})
 
-	payload := prawxxey.RequestPayload{
-		Method: http.MethodGet,
-		URL:    "http://localhost:1/nope",
+	envelope := taskEnvelope{
+		Request: prawxxey.RequestPayload{
+			Method: http.MethodGet,
+			URL:    "http://localhost:1/nope",
+		},
 	}
 
-	data, err := json.Marshal(payload)
+	data, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
 	task := asynq.NewTask(TaskTypeName, data)
@@ -136,12 +138,14 @@ func TestWorker_ProcessTask_FullRoundTrip(
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payload := prawxxey.RequestPayload{
-				Method: tt.method,
-				URL:    upstream.URL + tt.path,
+			envelope := taskEnvelope{
+				Request: prawxxey.RequestPayload{
+					Method: tt.method,
+					URL:    upstream.URL + tt.path,
+				},
 			}
 
-			data, err := json.Marshal(payload)
+			data, err := json.Marshal(envelope)
 			require.NoError(t, err)
 
 			task := asynq.NewTask(TaskTypeName, data)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,8 +67,9 @@ func setupFull(
 	srv := asynq.NewServer(
 		rds.RedisOpt(),
 		asynq.Config{
-			Concurrency: 2,
-			Queues:      map[string]int{queue: 1},
+			Concurrency:    2,
+			Queues:         map[string]int{queue: 1},
+			RetryDelayFunc: RetryDelayFunc,
 		},
 	)
 
@@ -581,4 +583,155 @@ func TestFull_MultiUpstreamRouting(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestFull_RetriesOnUpstreamFailure(
+	t *testing.T,
+) {
+	var calls atomic.Int32
+
+	upstream := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			n := calls.Add(1)
+			if n <= 2 {
+				hj, ok := w.(http.Hijacker)
+				if !ok {
+					return
+				}
+
+				conn, _, err := hj.Hijack()
+				if err != nil {
+					return
+				}
+
+				_ = conn.Close()
+
+				return
+			}
+
+			w.Header().Set(
+				"Content-Type", "text/plain",
+			)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("success after retries"))
+		}),
+	)
+	defer upstream.Close()
+
+	fe := setupFull(t, "", []UpstreamConfig{
+		{
+			Prefix:      "/",
+			URL:         upstream.URL,
+			MaxRetries:  3,
+			RetryDelay:  1 * time.Second,
+			MaxBodySize: config.DefaultMaxBodySize,
+		},
+	})
+	defer fe.cleanup()
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/retry-me", nil,
+	)
+	rec := httptest.NewRecorder()
+
+	fe.handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp acceptedResponse
+
+	require.NoError(t, json.Unmarshal(
+		rec.Body.Bytes(), &resp,
+	))
+
+	require.Eventually(t, func() bool {
+		info, err := fe.inspector.GetTaskInfo(
+			fe.queue, resp.JobID,
+		)
+		if err != nil {
+			return false
+		}
+
+		return info.State == asynq.TaskStateCompleted
+	}, 60*time.Second, 200*time.Millisecond)
+
+	contentRec := getJobContent(t, fe, resp.JobID)
+
+	assert.Equal(t, http.StatusOK, contentRec.Code)
+	assert.Equal(
+		t, "success after retries",
+		contentRec.Body.String(),
+	)
+	assert.Equal(t, int32(3), calls.Load())
+}
+
+func TestFull_RetriesExhausted(t *testing.T) {
+	upstream := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				return
+			}
+
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				return
+			}
+
+			_ = conn.Close()
+		}),
+	)
+	defer upstream.Close()
+
+	fe := setupFull(t, "", []UpstreamConfig{
+		{
+			Prefix:      "/",
+			URL:         upstream.URL,
+			MaxRetries:  2,
+			RetryDelay:  1 * time.Second,
+			MaxBodySize: config.DefaultMaxBodySize,
+		},
+	})
+	defer fe.cleanup()
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/always-fail", nil,
+	)
+	rec := httptest.NewRecorder()
+
+	fe.handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp acceptedResponse
+
+	require.NoError(t, json.Unmarshal(
+		rec.Body.Bytes(), &resp,
+	))
+
+	require.Eventually(t, func() bool {
+		info, err := fe.inspector.GetTaskInfo(
+			fe.queue, resp.JobID,
+		)
+		if err != nil {
+			return false
+		}
+
+		return info.State == asynq.TaskStateArchived
+	}, 60*time.Second, 200*time.Millisecond)
+
+	statusRec := getJobStatus(t, fe, resp.JobID)
+
+	var info jobInfo
+
+	require.NoError(t, json.Unmarshal(
+		statusRec.Body.Bytes(), &info,
+	))
+	assert.Equal(t, StatusFailed, info.Status)
 }

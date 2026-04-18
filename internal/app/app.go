@@ -124,6 +124,7 @@ func runWorker(
 		Queues: map[string]int{
 			cfg.Queue: 1,
 		},
+		RetryDelayFunc: proxqproxy.RetryDelayFunc,
 	})
 
 	go func() {
@@ -154,6 +155,8 @@ func buildUpstreamConfigs(
 				Prefix:               u.Prefix,
 				URL:                  u.URL,
 				Timeout:              u.Timeout.Std(),
+				MaxRetries:           u.MaxRetries,
+				RetryDelay:           u.RetryDelay.Std(),
 				MaxBodySize:          u.MaxBodySize,
 				DirectProxyThreshold: u.DirectProxyThreshold,
 				DirectProxyMode:      u.DirectProxyMode,

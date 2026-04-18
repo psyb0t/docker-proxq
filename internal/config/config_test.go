@@ -96,6 +96,8 @@ upstreams:
   - prefix: "/api"
     url: "http://api:3000"
     timeout: "10m"
+    maxRetries: 3
+    retryDelay: "5s"
     maxBodySize: 1024
     directProxyThreshold: 2048
     directProxyMode: "redirect"
@@ -136,6 +138,10 @@ upstreams:
 	assert.Equal(t, "http://api:3000", api.URL)
 	assert.Equal(
 		t, Duration(10*time.Minute), api.Timeout,
+	)
+	assert.Equal(t, 3, api.MaxRetries)
+	assert.Equal(
+		t, Duration(5*time.Second), api.RetryDelay,
 	)
 	assert.Equal(t, int64(1024), api.MaxBodySize)
 	assert.Equal(

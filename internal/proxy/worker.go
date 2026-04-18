@@ -55,9 +55,9 @@ func (w *Worker) ProcessTask(
 	ctx context.Context,
 	t *asynq.Task,
 ) error {
-	var payload prawxxey.RequestPayload
+	var envelope taskEnvelope
 	if err := json.Unmarshal(
-		t.Payload(), &payload,
+		t.Payload(), &envelope,
 	); err != nil {
 		return ctxerrors.Wrap(
 			err, "unmarshal task payload",
@@ -65,7 +65,7 @@ func (w *Worker) ProcessTask(
 	}
 
 	result, err := prawxxey.ForwardRequest(
-		ctx, w.forwardCfg, &payload,
+		ctx, w.forwardCfg, &envelope.Request,
 	)
 	if err != nil {
 		return ctxerrors.Wrap(

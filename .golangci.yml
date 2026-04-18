@@ -112,6 +112,7 @@ linters:
             - github.com/testcontainers/
             - github.com/docker/
             - gopkg.in/yaml.v3
+            - github.com/openai/openai-go/
 
   exclusions:
     generated: lax

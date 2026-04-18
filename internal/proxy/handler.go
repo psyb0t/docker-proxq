@@ -25,6 +25,8 @@ type UpstreamConfig struct {
 	Prefix               string
 	URL                  string
 	Timeout              time.Duration
+	MaxRetries           int
+	RetryDelay           time.Duration
 	MaxBodySize          int64
 	DirectProxyThreshold int64
 	DirectProxyMode      string
@@ -36,6 +38,8 @@ type upstream struct {
 	prefix               string
 	url                  string
 	timeout              time.Duration
+	maxRetries           int
+	retryDelay           time.Duration
 	maxBodySize          int64
 	directProxyThreshold int64
 	directProxyMode      string
@@ -80,6 +84,8 @@ func NewHandler(
 			prefix:               uc.Prefix,
 			url:                  strings.TrimRight(uc.URL, "/"),
 			timeout:              uc.Timeout,
+			maxRetries:           uc.MaxRetries,
+			retryDelay:           uc.RetryDelay,
 			maxBodySize:          uc.MaxBodySize,
 			directProxyThreshold: uc.DirectProxyThreshold,
 			directProxyMode:      uc.DirectProxyMode,
@@ -122,6 +128,7 @@ func buildReverseProxy(
 				"reverse proxy error",
 				"error", err,
 			)
+			setProxqSourceHeader(w)
 			proxylib.WriteError(
 				w, http.StatusBadGateway,
 			)
@@ -139,6 +146,7 @@ func (h *Handler) ServeHTTP(
 ) {
 	u, strippedURI := h.resolveUpstream(r)
 	if u == nil {
+		setProxqSourceHeader(w)
 		proxylib.WriteError(
 			w, http.StatusBadGateway,
 		)
@@ -261,6 +269,7 @@ func (h *Handler) directProxy(
 			"target", target,
 		)
 
+		setProxqSourceHeader(w)
 		http.Redirect(
 			w, r, target,
 			http.StatusTemporaryRedirect,
@@ -271,6 +280,7 @@ func (h *Handler) directProxy(
 
 	if u.reverseProxy == nil {
 		logger.Error("reverse proxy not configured")
+		setProxqSourceHeader(w)
 		proxylib.WriteError(
 			w, http.StatusBadGateway,
 		)
@@ -311,6 +321,7 @@ func (h *Handler) proxyWebSocket(
 		logger.Error(
 			"websocket proxy not configured",
 		)
+		setProxqSourceHeader(w)
 		proxylib.WriteError(
 			w, http.StatusBadGateway,
 		)
@@ -343,6 +354,7 @@ func (h *Handler) enqueueRequest(
 			"failed to read request body",
 			"error", err,
 		)
+		setProxqSourceHeader(w)
 		proxylib.WriteError(
 			w, http.StatusInternalServerError,
 		)
@@ -350,27 +362,35 @@ func (h *Handler) enqueueRequest(
 		return
 	}
 
-	payload := proxylib.RequestPayload{
-		Method:   r.Method,
-		URL:      u.url + strippedURI,
-		Headers:  r.Header,
-		Body:     body,
-		ClientIP: aichteeteapee.GetClientIP(r),
-		Proto:    proxylib.RequestScheme(r),
+	envelope := taskEnvelope{
+		Request: proxylib.RequestPayload{
+			Method:   r.Method,
+			URL:      u.url + strippedURI,
+			Headers:  r.Header,
+			Body:     body,
+			ClientIP: aichteeteapee.GetClientIP(r),
+			Proto:    proxylib.RequestScheme(r),
+		},
+		RetryDelay: u.retryDelay,
 	}
 
-	taskID, err := h.enqueue(r, payload, u.timeout)
+	taskID, err := h.enqueue(
+		r, envelope, u.timeout, u.maxRetries,
+	)
 	if err != nil {
 		logger.Error(
 			"failed to enqueue task",
 			"error", err,
 		)
+		setProxqSourceHeader(w)
 		proxylib.WriteError(
 			w, http.StatusInternalServerError,
 		)
 
 		return
 	}
+
+	setProxqSourceHeader(w)
 
 	aichteeteapee.WriteJSON(
 		w,
@@ -381,10 +401,11 @@ func (h *Handler) enqueueRequest(
 
 func (h *Handler) enqueue(
 	r *http.Request,
-	payload proxylib.RequestPayload,
+	envelope taskEnvelope,
 	timeout time.Duration,
+	maxRetries int,
 ) (string, error) {
-	data, err := json.Marshal(payload)
+	data, err := json.Marshal(envelope)
 	if err != nil {
 		return "", ctxerrors.Wrap(
 			err, "marshal payload",
@@ -397,7 +418,7 @@ func (h *Handler) enqueue(
 	opts := []asynq.Option{
 		asynq.TaskID(taskID),
 		asynq.Queue(h.queue),
-		asynq.MaxRetry(0),
+		asynq.MaxRetry(maxRetries),
 		asynq.Retention(h.taskRetention),
 	}
 

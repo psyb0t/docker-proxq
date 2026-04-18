@@ -150,22 +150,28 @@ func TestHandler_ServeHTTP(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, TaskTypeName, info.Type)
 
-			var payload struct {
-				Method  string              `json:"method"`
-				URL     string              `json:"url"`
-				Headers map[string][]string `json:"headers"`
+			var envelope struct {
+				Request struct {
+					Method  string              `json:"method"`
+					URL     string              `json:"url"`
+					Headers map[string][]string `json:"headers"`
+				} `json:"request"`
 			}
 
 			err = json.Unmarshal(
-				info.Payload, &payload,
+				info.Payload, &envelope,
 			)
 			require.NoError(t, err)
-			assert.Equal(t, tt.method, payload.Method)
-			assert.Equal(t, tt.expectURL, payload.URL)
+			assert.Equal(
+				t, tt.method, envelope.Request.Method,
+			)
+			assert.Equal(
+				t, tt.expectURL, envelope.Request.URL,
+			)
 
 			for k, v := range tt.headers {
 				assert.Contains(
-					t, payload.Headers[k], v,
+					t, envelope.Request.Headers[k], v,
 				)
 			}
 		})
@@ -244,14 +250,18 @@ func TestHandler_ServeHTTP_MultiUpstream(
 			)
 			require.NoError(t, err)
 
-			var payload struct {
-				URL string `json:"url"`
+			var envelope struct {
+				Request struct {
+					URL string `json:"url"`
+				} `json:"request"`
 			}
 
 			require.NoError(t, json.Unmarshal(
-				info.Payload, &payload,
+				info.Payload, &envelope,
 			))
-			assert.Equal(t, tt.expectURL, payload.URL)
+			assert.Equal(
+				t, tt.expectURL, envelope.Request.URL,
+			)
 		})
 	}
 }

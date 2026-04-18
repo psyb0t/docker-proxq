@@ -1,9 +1,13 @@
 package proxy
 
 import (
+	"encoding/json"
+	"math"
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
+	proxqtypes "github.com/psyb0t/proxq/pkg/types"
 )
 
 const TaskTypeName = "proxy:request"
@@ -11,8 +15,8 @@ const TaskTypeName = "proxy:request"
 const DefaultQueue = "default"
 
 const (
-	HeaderNameXProxqSource = "X-Proxq-Source"
-	HeaderValueProxq       = "proxq"
+	HeaderNameXProxqSource = proxqtypes.HeaderNameXProxqSource
+	HeaderValueProxq       = proxqtypes.HeaderValueProxq
 )
 
 type Status string
@@ -40,6 +44,28 @@ func StatusFromTaskState(s asynq.TaskState) Status {
 	}
 
 	return StatusFailed
+}
+
+type taskEnvelope struct {
+	Request    prawxxey.RequestPayload `json:"request"`
+	RetryDelay time.Duration           `json:"retryDelay,omitempty"`
+}
+
+func RetryDelayFunc(
+	n int, _ error, t *asynq.Task,
+) time.Duration {
+	var envelope taskEnvelope
+
+	if err := json.Unmarshal(
+		t.Payload(), &envelope,
+	); err == nil && envelope.RetryDelay > 0 {
+		return envelope.RetryDelay
+	}
+
+	//nolint:mnd
+	return time.Duration(
+		math.Pow(float64(n), 4),
+	) * time.Second
 }
 
 type jobInfo struct {
