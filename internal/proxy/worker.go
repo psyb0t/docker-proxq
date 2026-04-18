@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/psyb0t/aichteeteapee/server/proxy"
+	"github.com/psyb0t/aichteeteapee/server/prawxxey"
 	"github.com/psyb0t/common-go/cache"
 	"github.com/psyb0t/ctxerrors"
 )
@@ -23,7 +23,7 @@ type WorkerConfig struct {
 }
 
 type Worker struct {
-	forwardCfg proxy.ForwardConfig
+	forwardCfg prawxxey.ForwardConfig
 	logger     *slog.Logger
 }
 
@@ -39,7 +39,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 	}
 
 	return &Worker{
-		forwardCfg: proxy.ForwardConfig{
+		forwardCfg: prawxxey.ForwardConfig{
 			HTTPClient: &http.Client{
 				Timeout: timeout,
 			},
@@ -54,7 +54,7 @@ func (w *Worker) ProcessTask(
 	ctx context.Context,
 	t *asynq.Task,
 ) error {
-	var payload proxy.RequestPayload
+	var payload prawxxey.RequestPayload
 	if err := json.Unmarshal(
 		t.Payload(), &payload,
 	); err != nil {
@@ -63,7 +63,7 @@ func (w *Worker) ProcessTask(
 		)
 	}
 
-	result, err := proxy.ForwardRequest(
+	result, err := prawxxey.ForwardRequest(
 		ctx, w.forwardCfg, &payload,
 	)
 	if err != nil {

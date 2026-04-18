@@ -4,15 +4,47 @@ Pronounced "HTTP". The name is the whole joke. Moving on.
 
 A Go HTTP library that does everything you need and nothing you don't. Spin up a production-ready server with middleware, WebSocket hubs, file uploads, static serving, request proxying with caching, and OpenAPI validation — all with sane defaults and zero boilerplate.
 
+## Table of Contents
+
+- [What's in the box](#whats-in-the-box)
+  - [Root package — constants and utilities](#root-package--constants-and-utilities)
+  - [server/](#server--http-server)
+  - [server/middleware/](#servermiddleware--middleware-stack)
+  - [server/prawxxey/](#serverprawxxey--http-request-forwarding)
+  - [server/dabluvee-es/](#serverdabluvee-es--websocket-event-system)
+  - [echo/](#echo--echo-framework-wrapper)
+  - [echo/middleware/](#echomiddleware--echo-api-middleware)
+  - [oapi-codegen/middleware/](#oapi-codegenmiddleware--openapi-validation-for-echo)
+- [Logging](#logging)
+- [Development](#development)
+- [License](#license)
+
 ```go
 srv, _ := server.New()
-srv.GetRootGroup().GET("/hello", func(w http.ResponseWriter, _ *http.Request) {
-    aichteeteapee.WriteJSON(w, http.StatusOK, map[string]string{"msg": "hi"})
-})
-srv.Start(ctx, nil)
+
+router := &server.Router{
+    GlobalMiddlewares: []middleware.Middleware{
+        middleware.RequestID(),
+        middleware.Logger(),
+        middleware.Recovery(),
+        middleware.SecurityHeaders(),
+    },
+    Groups: []server.GroupConfig{{
+        Path: "/",
+        Routes: []server.RouteConfig{{
+            Method:  http.MethodGet,
+            Path:    "/hello",
+            Handler: func(w http.ResponseWriter, _ *http.Request) {
+                aichteeteapee.WriteJSON(w, http.StatusOK, map[string]string{"msg": "hi"})
+            },
+        }},
+    }},
+}
+
+srv.Start(ctx, router)
 ```
 
-That gives you HTTP + HTTPS, graceful shutdown, structured logging, request IDs, and security headers. Out of the box.
+Request IDs, structured logging, panic recovery, security headers, graceful shutdown, TLS support. You pick what you want in the middleware stack.
 
 ## What's in the box
 
@@ -127,12 +159,14 @@ middleware.Logger(
 
 **EnforceRequestContentType** — reject requests with wrong `Content-Type`. Skips GET/HEAD/DELETE. Convenience: `EnforceRequestContentTypeJSON()`.
 
-### `server/proxy/` — HTTP request forwarding
+### `server/prawxxey/` — HTTP request forwarding
+
+Pronounced "proxy". Obviously.
 
 Forward requests to upstream servers with optional response caching.
 
 ```go
-result, err := proxy.ForwardRequest(ctx, proxy.ForwardConfig{
+result, err := prawxxey.ForwardRequest(ctx, prawxxey.ForwardConfig{
     HTTPClient: http.DefaultClient,
     Cache:      myCache,            // nil = no caching
     CacheTTL:   5 * time.Minute,

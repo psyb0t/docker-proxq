@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	proxylib "github.com/psyb0t/aichteeteapee/server/proxy"
+	proxylib "github.com/psyb0t/aichteeteapee/server/prawxxey"
 )
 
 const TaskTypeName = "proxy:request"
@@ -39,10 +39,10 @@ func StatusFromTaskState(s asynq.TaskState) Status {
 }
 
 type JobInfo struct {
-	ID          string                    `json:"id"`
-	Status      Status                    `json:"status"`
-	Result      *proxylib.ResponseResult  `json:"result,omitempty"`
-	Error       string                    `json:"error,omitempty"`
-	CreatedAt   time.Time                 `json:"createdAt,omitzero"`
-	CompletedAt time.Time                 `json:"completedAt,omitzero"`
+	ID          string                   `json:"id"`
+	Status      Status                   `json:"status"`
+	Result      *proxylib.ResponseResult `json:"result,omitempty"`
+	Error       string                   `json:"error,omitempty"`
+	CreatedAt   time.Time                `json:"createdAt,omitzero"`
+	CompletedAt time.Time                `json:"completedAt,omitzero"`
 }

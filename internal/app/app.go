@@ -5,16 +5,17 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 	"os/signal"
 	"path"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee/server"
 	"github.com/psyb0t/aichteeteapee/server/middleware"
 	"github.com/psyb0t/common-go/cache"
+	"github.com/psyb0t/ctxerrors"
 	"github.com/psyb0t/proxq/internal/config"
 	proxqproxy "github.com/psyb0t/proxq/internal/proxy"
 )
@@ -22,7 +23,7 @@ import (
 func Run() error {
 	cfg, err := config.Parse()
 	if err != nil {
-		return err
+		return ctxerrors.Wrap(err, "parse config")
 	}
 
 	if cfg.UpstreamURL == "" {
@@ -36,31 +37,25 @@ func Run() error {
 	)
 	defer stop()
 
-	redisOpt := asynq.RedisClientOpt{
-		Addr:     cfg.RedisAddr,
-		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB,
-	}
+	redisOpt, client, inspector := setupAsynq(cfg)
 
-	client := asynq.NewClient(redisOpt)
 	defer func() { _ = client.Close() }()
-
-	inspector := asynq.NewInspector(redisOpt)
 	defer func() { _ = inspector.Close() }()
 
 	cacheCfg, err := cache.ParseConfig()
 	if err != nil {
-		return err
+		return ctxerrors.Wrap(
+			err, "parse cache config",
+		)
 	}
 
-	jobCache, cacheCleanup, err := cache.FromConfig(
-		cacheCfg,
-	)
+	jobCache, cleanup, err := cache.FromConfig(cacheCfg)
 	if err != nil {
-		return err
+		return ctxerrors.Wrap(
+			err, "create cache from config",
+		)
 	}
 
-	cleanup := cacheCleanup
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -79,6 +74,20 @@ func Run() error {
 	wg.Wait()
 
 	return err
+}
+
+func setupAsynq(
+	cfg config.Config,
+) (asynq.RedisClientOpt, *asynq.Client, *asynq.Inspector) {
+	redisOpt := asynq.RedisClientOpt{
+		Addr:     cfg.RedisAddr,
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB,
+	}
+
+	return redisOpt,
+		asynq.NewClient(redisOpt),
+		asynq.NewInspector(redisOpt)
 }
 
 func runWorker(
@@ -122,22 +131,16 @@ func runWorker(
 	}
 }
 
-func startHTTPServer(
-	ctx context.Context,
+func buildRouter(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
-) error {
-	srv, err := server.New()
-	if err != nil {
-		return err
-	}
-
+) *server.Router {
 	proxyHandler := proxqproxy.NewHandler(
 		client,
 		proxqproxy.HandlerConfig{
 			UpstreamURL:        cfg.UpstreamURL,
-			MaxRequestBodySize: cfg.MaxRequestBodySize,
+			MaxRequestBodySize: cfg.MaxBodySize,
 			Queue:              cfg.Queue,
 			TaskRetention:      cfg.TaskRetention,
 		},
@@ -149,7 +152,7 @@ func startHTTPServer(
 
 	jobsPath := path.Join(cfg.JobsPath, "{id}")
 
-	router := &server.Router{
+	return &server.Router{
 		GlobalMiddlewares: []middleware.Middleware{
 			middleware.RequestID(),
 			middleware.Logger(),
@@ -178,6 +181,24 @@ func startHTTPServer(
 			},
 		},
 	}
+}
 
-	return srv.Start(ctx, router)
+func startHTTPServer(
+	ctx context.Context,
+	cfg config.Config,
+	client *asynq.Client,
+	inspector *asynq.Inspector,
+) error {
+	srv, err := server.New()
+	if err != nil {
+		return ctxerrors.Wrap(err, "create server")
+	}
+
+	router := buildRouter(cfg, client, inspector)
+
+	if err = srv.Start(ctx, router); err != nil {
+		return ctxerrors.Wrap(err, "start server")
+	}
+
+	return nil
 }

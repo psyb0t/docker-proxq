@@ -10,12 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee"
-	proxylib "github.com/psyb0t/aichteeteapee/server/proxy"
+	proxylib "github.com/psyb0t/aichteeteapee/server/prawxxey"
 	"github.com/psyb0t/ctxerrors"
 )
 
-const defaultMaxRequestBodySize = 10 << 20 // 10MB
-const defaultTaskRetention = 1 * time.Hour
+const (
+	defaultMaxRequestBodySize = 10 << 20 // 10MB
+	defaultTaskRetention      = 1 * time.Hour
+)
 
 type HandlerConfig struct {
 	UpstreamURL        string
