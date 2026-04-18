@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/psyb0t/aichteeteapee/server/prawxxey"
+	"github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 	"github.com/psyb0t/common-go/cache"
 	"github.com/psyb0t/ctxerrors"
 )

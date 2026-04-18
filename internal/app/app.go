@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/psyb0t/aichteeteapee/server"
-	"github.com/psyb0t/aichteeteapee/server/middleware"
+	"github.com/psyb0t/aichteeteapee/serbewr"
+	"github.com/psyb0t/aichteeteapee/serbewr/middleware"
 	"github.com/psyb0t/common-go/cache"
 	"github.com/psyb0t/ctxerrors"
 	"github.com/psyb0t/proxq/internal/config"
@@ -135,7 +135,7 @@ func buildRouter(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
-) *server.Router {
+) *serbewr.Router {
 	proxyHandler := proxqproxy.NewHandler(
 		client,
 		proxqproxy.HandlerConfig{
@@ -152,16 +152,16 @@ func buildRouter(
 
 	jobsPath := path.Join(cfg.JobsPath, "{id}")
 
-	return &server.Router{
+	return &serbewr.Router{
 		GlobalMiddlewares: []middleware.Middleware{
 			middleware.RequestID(),
 			middleware.Logger(),
 			middleware.Recovery(),
 		},
-		Groups: []server.GroupConfig{
+		Groups: []serbewr.GroupConfig{
 			{
 				Path: "/",
-				Routes: []server.RouteConfig{
+				Routes: []serbewr.RouteConfig{
 					{
 						Method:  http.MethodGet,
 						Path:    jobsPath,
@@ -189,7 +189,7 @@ func startHTTPServer(
 	client *asynq.Client,
 	inspector *asynq.Inspector,
 ) error {
-	srv, err := server.New()
+	srv, err := serbewr.New()
 	if err != nil {
 		return ctxerrors.Wrap(err, "create server")
 	}

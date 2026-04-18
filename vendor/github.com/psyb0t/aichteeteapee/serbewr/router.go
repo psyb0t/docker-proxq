@@ -1,9 +1,9 @@
-package server
+package serbewr
 
 import (
 	"net/http"
 
-	"github.com/psyb0t/aichteeteapee/server/middleware"
+	"github.com/psyb0t/aichteeteapee/serbewr/middleware"
 )
 
 type StaticRouteConfig struct {

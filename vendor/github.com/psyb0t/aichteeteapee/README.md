@@ -8,10 +8,10 @@ A Go HTTP library that does everything you need and nothing you don't. Spin up a
 
 - [What's in the box](#whats-in-the-box)
   - [Root package — constants and utilities](#root-package--constants-and-utilities)
-  - [server/](#server--http-server)
-  - [server/middleware/](#servermiddleware--middleware-stack)
-  - [server/prawxxey/](#serverprawxxey--http-request-forwarding)
-  - [server/dabluvee-es/](#serverdabluvee-es--websocket-event-system)
+  - [serbewr/](#serbewr--http-server)
+  - [serbewr/middleware/](#serbewrmiddleware--middleware-stack)
+  - [serbewr/prawxxey/](#serbewrprawxxey--http-request-forwarding)
+  - [serbewr/dabluvee-es/](#serbewrdabluvee-es--websocket-event-system)
   - [echo/](#echo--echo-framework-wrapper)
   - [echo/middleware/](#echomiddleware--echo-api-middleware)
   - [oapi-codegen/middleware/](#oapi-codegenmiddleware--openapi-validation-for-echo)
@@ -20,18 +20,18 @@ A Go HTTP library that does everything you need and nothing you don't. Spin up a
 - [License](#license)
 
 ```go
-srv, _ := server.New()
+srv, _ := serbewr.New()
 
-router := &server.Router{
+router := &serbewr.Router{
     GlobalMiddlewares: []middleware.Middleware{
         middleware.RequestID(),
         middleware.Logger(),
         middleware.Recovery(),
         middleware.SecurityHeaders(),
     },
-    Groups: []server.GroupConfig{{
+    Groups: []serbewr.GroupConfig{{
         Path: "/",
-        Routes: []server.RouteConfig{{
+        Routes: []serbewr.RouteConfig{{
             Method:  http.MethodGet,
             Path:    "/hello",
             Handler: func(w http.ResponseWriter, _ *http.Request) {
@@ -64,18 +64,20 @@ Everything you need to stop hardcoding strings in your HTTP code.
 
 **Network & scheme constants**: `SchemeHTTP`, `SchemeHTTPS`, `NetworkTypeTCP`, `NetworkTypeUnix`, etc.
 
-### `server/` — HTTP server
+### `serbewr/` — HTTP server
+
+Pronounced "server". D'oooh you kno.
 
 Built on `net/http` with routing via Go 1.22+ `ServeMux` patterns.
 
 ```go
-srv, _ := server.New()                    // defaults from env vars
-srv, _ := server.NewWithConfig(config)     // explicit config
+srv, _ := serbewr.New()                    // defaults from env vars
+srv, _ := serbewr.NewWithConfig(config)     // explicit config
 ```
 
 **Router with groups and middleware**:
 ```go
-router := &server.Router{
+router := &serbewr.Router{
     GlobalMiddlewares: []middleware.Middleware{
         middleware.RequestID(),
         middleware.Logger(),
@@ -83,13 +85,13 @@ router := &server.Router{
         middleware.SecurityHeaders(),
         middleware.CORS(),
     },
-    Static: []server.StaticRouteConfig{
+    Static: []serbewr.StaticRouteConfig{
         {Dir: "./static", Path: "/static"},
     },
-    Groups: []server.GroupConfig{
+    Groups: []serbewr.GroupConfig{
         {
             Path: "/api/v1",
-            Routes: []server.RouteConfig{
+            Routes: []serbewr.RouteConfig{
                 {Method: http.MethodGet, Path: "/users", Handler: listUsers},
                 {Method: http.MethodPost, Path: "/users", Handler: createUser},
             },
@@ -99,7 +101,7 @@ router := &server.Router{
             Middlewares: []middleware.Middleware{
                 middleware.BasicAuth(middleware.WithBasicAuthUsers(users)),
             },
-            Routes: []server.RouteConfig{
+            Routes: []serbewr.RouteConfig{
                 {Method: http.MethodGet, Path: "/stats", Handler: adminStats},
             },
         },
@@ -130,7 +132,7 @@ srv.Start(ctx, router)
 | `HTTP_SERVER_TLSENABLED` | `false` |
 | `HTTP_SERVER_TLSLISTENADDRESS` | `127.0.0.1:8443` |
 
-### `server/middleware/` — middleware stack
+### `serbewr/middleware/` — middleware stack
 
 Every middleware uses `slogging.GetLogger(ctx)` for structured logging with context propagation. RequestID sets the request ID on the context logger, Logger adds method/path/ip — downstream code gets all fields for free.
 
@@ -159,7 +161,7 @@ middleware.Logger(
 
 **EnforceRequestContentType** — reject requests with wrong `Content-Type`. Skips GET/HEAD/DELETE. Convenience: `EnforceRequestContentTypeJSON()`.
 
-### `server/prawxxey/` — HTTP request forwarding
+### `serbewr/prawxxey/` — HTTP request forwarding
 
 Pronounced "proxy". Obviously.
 
@@ -185,7 +187,7 @@ result, err := prawxxey.ForwardRequest(ctx, prawxxey.ForwardConfig{
 
 `RequestPayload.Hash()` and `RequestPayload.HashExcluding(excludeHeaders)` for deterministic request fingerprinting.
 
-### `server/dabluvee-es/` — WebSocket event system
+### `serbewr/dabluvee-es/` — WebSocket event system
 
 Pronounced "WS" — because why stop at one wordplay.
 
@@ -269,9 +271,9 @@ make test           # go test -race ./...
 make test-coverage  # coverage with 85% minimum threshold
 ```
 
-Smoke tests in `server/.test-NOT PART OF PROJECT/`:
+Smoke tests in `serbewr/.test-NOT PART OF PROJECT/`:
 ```bash
-cd "server/.test-NOT PART OF PROJECT"
+cd "serbewr/.test-NOT PART OF PROJECT"
 bash run_tests_rapid.sh
 ```
 

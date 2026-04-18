@@ -1,4 +1,4 @@
-package server
+package serbewr
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/psyb0t/aichteeteapee/server/middleware"
+	"github.com/psyb0t/aichteeteapee/serbewr/middleware"
 )
 
 type Group struct {

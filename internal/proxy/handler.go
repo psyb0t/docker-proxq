@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee"
-	proxylib "github.com/psyb0t/aichteeteapee/server/prawxxey"
+	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 	"github.com/psyb0t/ctxerrors"
 )
 

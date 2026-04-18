@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	proxylib "github.com/psyb0t/aichteeteapee/server/prawxxey"
+	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 )
 
 const TaskTypeName = "proxy:request"

@@ -1,8 +1,9 @@
-IMAGE_NAME := psyb0t/proxq
-TAG        := latest
-TEST_TAG   := $(TAG)-test
+IMAGE_NAME       := psyb0t/proxq
+TAG              := latest
+TEST_TAG         := $(TAG)-test
+MIN_TEST_COVERAGE := 85
 
-.PHONY: all build build-test dep lint lint-fix test clean help
+.PHONY: all build build-test dep lint lint-fix test test-coverage clean help
 
 all: dep lint test ## Run dep, lint and test
 
@@ -24,6 +25,23 @@ lint-fix: ## Lint and auto-fix
 test: ## Run tests
 	@echo "Running tests..."
 	@go test -race ./...
+
+test-coverage: ## Run tests with coverage check. Fails if coverage is below the threshold.
+	@echo "Running tests with coverage check..."
+	@trap 'rm -f coverage.txt' EXIT; \
+	go test -race -coverprofile=coverage.txt ./...; \
+	if [ $$? -ne 0 ]; then \
+		echo "Test failed. Exiting."; \
+		exit 1; \
+	fi; \
+	result=$$(go tool cover -func=coverage.txt | grep -oP 'total:\s+\(statements\)\s+\K\d+' || echo "0"); \
+	if [ $$result -eq 0 ]; then \
+		echo "No test coverage information available."; \
+		exit 0; \
+	elif [ $$result -lt $(MIN_TEST_COVERAGE) ]; then \
+		echo "FAIL: Coverage $$result% is less than the minimum $(MIN_TEST_COVERAGE)%"; \
+		exit 1; \
+	fi
 
 build: ## Build the Docker image
 	docker build -t $(IMAGE_NAME):$(TAG) .

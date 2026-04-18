@@ -9,7 +9,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee"
-	proxylib "github.com/psyb0t/aichteeteapee/server/prawxxey"
+	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 )
 
 type JobsHandler struct {
