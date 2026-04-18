@@ -124,6 +124,7 @@ linters:
           - funlen
           - gocognit
           - maintidx
+          - noctx
 
 formatters:
   enable:
