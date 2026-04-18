@@ -1,0 +1,7 @@
+.git
+.github
+*.md
+*.db
+*.db-wal
+*.db-shm
+tests/

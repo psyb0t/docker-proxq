@@ -1,0 +1,24 @@
+name: pipeline
+
+on: [ push ]
+
+jobs:
+  go:
+    uses: psyb0t/reusable-github-workflows/.github/workflows/go-workflow.yml@master
+    with:
+      go_version: "1.26"
+      dep_command: "make dep"
+      lint_command: "make lint"
+      test_command: "make test-coverage"
+      is_vendored: true
+
+  docker:
+    needs: go
+    uses: psyb0t/reusable-github-workflows/.github/workflows/docker-image-workflow.yml@master
+    with:
+      repository_name: psyb0t/proxq
+      target_platforms: "linux/amd64,linux/arm64"
+      scan_severity: "medium"
+    secrets:
+      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
