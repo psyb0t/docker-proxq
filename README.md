@@ -6,6 +6,23 @@ Think of it as "I'll get back to you" as a service. Every HTTP request becomes a
 
 Oh, and it caches too. Because hitting the same endpoint twice is for people who enjoy watching paint dry.
 
+## Table of Contents
+
+- [What it actually does](#what-it-actually-does)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+  - [The important one](#the-important-one)
+  - [Proxy settings](#proxy-settings)
+  - [Caching](#caching)
+  - [HTTP server](#http-server)
+- [API](#api)
+  - [Send a request](#send-a-request-any-method-any-path)
+  - [Poll for result](#poll-for-result)
+  - [Cancel a job](#cancel-a-job)
+- [Architecture](#architecture)
+- [Development](#development)
+- [License](#license)
+
 ## What it actually does
 
 ```
