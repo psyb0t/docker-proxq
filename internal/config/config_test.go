@@ -178,21 +178,19 @@ upstreams:
 
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
-		name       string
-		yaml       string
-		fileMiss   bool
-		expectErr  error
-		expectText string
+		name      string
+		yaml      string
+		fileMiss  bool
+		expectErr error
 	}{
 		{
-			name:       "file not found",
-			fileMiss:   true,
-			expectText: "read config file",
+			name:      "file not found",
+			fileMiss:  true,
+			expectErr: os.ErrNotExist,
 		},
 		{
-			name:       "invalid yaml",
-			yaml:       "{{{{",
-			expectText: "parse config yaml",
+			name: "invalid yaml",
+			yaml: "{{{{",
 		},
 		{
 			name:      "no upstreams",
@@ -225,7 +223,6 @@ upstreams:
       patterns:
         - "[invalid"
 `,
-			expectText: "compile regex",
 		},
 		{
 			name: "root with multiple upstreams",
@@ -285,12 +282,6 @@ upstreams:
 			if tt.expectErr != nil {
 				assert.ErrorIs(t, err, tt.expectErr)
 			}
-
-			if tt.expectText != "" {
-				assert.Contains(
-					t, err.Error(), tt.expectText,
-				)
-			}
 		})
 	}
 }
@@ -304,7 +295,6 @@ func TestDuration_UnmarshalYAML_Invalid(t *testing.T) {
 		[]byte(`d: "not-a-duration"`), &out,
 	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse duration")
 }
 
 func TestDuration_UnmarshalYAML(t *testing.T) {

@@ -647,3 +647,193 @@ func TestTransport_UpstreamErrorStatusPreserved(
 		t, string(body), "rate limited",
 	)
 }
+
+func TestNewClient(t *testing.T) {
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer srv.Close()
+
+	client := NewClient(Config{
+		ProxqBaseURL: srv.URL,
+		APIKey:       "sk-test",
+		PollInterval: 10 * time.Millisecond,
+	})
+
+	assert.NotNil(t, client)
+}
+
+func TestNewClient_WithHTTPClient(t *testing.T) {
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer srv.Close()
+
+	customClient := &http.Client{
+		Timeout: 42 * time.Second,
+	}
+
+	client := NewClient(Config{
+		ProxqBaseURL: srv.URL,
+		HTTPClient:   customClient,
+	})
+
+	assert.NotNil(t, client)
+}
+
+func TestNewClient_NoAPIKey(t *testing.T) {
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer srv.Close()
+
+	client := NewClient(Config{
+		ProxqBaseURL: srv.URL,
+	})
+
+	assert.NotNil(t, client)
+}
+
+func TestCloneClientWithTransport_NilBase(
+	t *testing.T,
+) {
+	rt := http.DefaultTransport
+
+	result := cloneClientWithTransport(nil, rt)
+
+	assert.NotNil(t, result)
+	assert.Equal(t, rt, result.Transport)
+	assert.Zero(t, result.Timeout)
+	assert.Nil(t, result.Jar)
+}
+
+func TestCloneClientWithTransport_WithBase(
+	t *testing.T,
+) {
+	rt := http.DefaultTransport
+
+	base := &http.Client{
+		Timeout: 99 * time.Second,
+	}
+
+	result := cloneClientWithTransport(base, rt)
+
+	assert.Equal(t, rt, result.Transport)
+	assert.Equal(t, 99*time.Second, result.Timeout)
+}
+
+func TestTransport_ProxqDown(t *testing.T) {
+	transport := buildTransport(Config{
+		ProxqBaseURL: "http://127.0.0.1:1",
+		PollInterval: 10 * time.Millisecond,
+	})
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		"http://127.0.0.1:1/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4o"}`),
+	)
+	require.NoError(t, err)
+
+	resp, err := transport.RoundTrip(req)
+
+	defer requireCloseBody(t, resp)
+
+	require.Error(t, err)
+}
+
+func TestTransport_InvalidJobResponse(t *testing.T) {
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			_ *http.Request,
+		) {
+			w.Header().Set(
+				proxqtypes.HeaderNameXProxqSource,
+				proxqtypes.HeaderValueProxq,
+			)
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`not json`))
+		}),
+	)
+	defer srv.Close()
+
+	transport := buildTransport(Config{
+		ProxqBaseURL: srv.URL,
+		PollInterval: 10 * time.Millisecond,
+		HTTPClient:   srv.Client(),
+	})
+
+	resp, err := postCompletion(
+		t, transport,
+		srv.URL+"/v1/chat/completions",
+		`{"model":"gpt-4o"}`,
+	)
+
+	defer requireCloseBody(t, resp)
+
+	require.Error(t, err)
+}
+
+func TestTransport_PollInvalidJSON(t *testing.T) {
+	jobID := "bad-status-job"
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(
+		"POST /v1/chat/completions",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set(
+				proxqtypes.HeaderNameXProxqSource,
+				proxqtypes.HeaderValueProxq,
+			)
+			w.WriteHeader(http.StatusAccepted)
+
+			resp, _ := json.Marshal(
+				jobAccepted{JobID: jobID},
+			)
+			_, _ = w.Write(resp)
+		},
+	)
+
+	mux.HandleFunc(
+		"GET /__jobs/{id}",
+		func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{broken`))
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	transport := buildTransport(Config{
+		ProxqBaseURL: srv.URL,
+		PollInterval: 10 * time.Millisecond,
+		HTTPClient:   srv.Client(),
+	})
+
+	resp, err := postCompletion(
+		t, transport,
+		srv.URL+"/v1/chat/completions",
+		`{"model":"gpt-4o"}`,
+	)
+
+	defer requireCloseBody(t, resp)
+
+	require.Error(t, err)
+}
