@@ -248,6 +248,86 @@ Built on:
 - **[common-go](https://github.com/psyb0t/common-go)** — cache package (in-memory LRU + Redis implementations)
 - **[asynq](https://github.com/hibiken/asynq)** — Redis-backed task queue (the job management layer)
 
+## Use cases
+
+### Slow APIs behind reverse proxies with short timeouts
+
+Your CDN or reverse proxy (nginx, Cloudflare, etc.) has a request timeout. Your backend sometimes takes longer. Stick proxq between them:
+
+```yaml
+upstreams:
+  - prefix: "/"
+    url: "http://slow-backend:8080"
+    timeout: "10m"
+```
+
+Client sends request → gets a job ID back instantly (reverse proxy is happy, fast response) → worker takes as long as the backend needs → client polls for the result whenever.
+
+### Webhook relay
+
+Fire webhooks without blocking the sender. Queue them, deliver at your own pace, retry if needed:
+
+```yaml
+upstreams:
+  - prefix: "/hooks"
+    url: "http://webhook-processor:8080"
+    timeout: "30s"
+```
+
+### Mixed sync/async API
+
+Some endpoints are fast (auth, health), others are slow (reports, exports). Queue the slow ones, let the fast ones pass through:
+
+```yaml
+upstreams:
+  - prefix: "/api"
+    url: "http://backend:3000"
+    timeout: "5m"
+    pathFilter:
+      mode: "blacklist"
+      patterns:
+        - "^/api/auth"
+        - "^/api/health"
+```
+
+Auth and health requests bypass the queue and hit the backend directly. Everything else gets queued.
+
+### Image/video processing pipeline
+
+Accept large uploads, queue them for processing, let the client check back later:
+
+```yaml
+upstreams:
+  - prefix: "/process"
+    url: "http://media-worker:9000"
+    timeout: "30m"
+    maxBodySize: 1073741824
+    directProxyThreshold: 0
+```
+
+`directProxyThreshold: 0` disables body-size bypass — everything gets queued regardless of size (up to `maxBodySize`).
+
+### Multi-service gateway
+
+Route to different backends by path, each with its own rules:
+
+```yaml
+upstreams:
+  - prefix: "/api"
+    url: "http://api:3000"
+    timeout: "5m"
+
+  - prefix: "/ml"
+    url: "http://ml-service:8080"
+    timeout: "15m"
+
+  - prefix: "/uploads"
+    url: "http://file-server:9000/storage"
+    timeout: "10m"
+    maxBodySize: 1073741824
+    directProxyMode: "redirect"
+```
+
 ## Development
 
 ```bash
