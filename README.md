@@ -21,6 +21,7 @@ Oh, and it caches too. Because hitting the same endpoint twice is for people who
   - [Cancel a job](#cancel-a-job)
 - [Direct proxy bypass](#direct-proxy-bypass)
 - [Architecture](#architecture)
+- [Client libraries](#client-libraries)
 - [Development](#development)
 - [License](#license)
 
@@ -329,6 +330,35 @@ upstreams:
     maxBodySize: 1073741824
     directProxyMode: "redirect"
 ```
+
+## Client libraries
+
+### OpenAI Go client
+
+Drop-in replacement for [`openai-go`](https://github.com/openai/openai-go). Swap one line and all your SDK calls go through proxq transparently — chat completions, embeddings, images, audio, everything.
+
+```go
+import proxqopenai "github.com/psyb0t/proxq/pkg/clients/openai"
+
+// Before: client := openai.NewClient(option.WithAPIKey("sk-..."))
+// After:
+client := proxqopenai.NewClient(proxqopenai.Config{
+    ProxqBaseURL: "https://proxq.example.com",
+    APIKey:       "sk-...",
+})
+
+// Same code, same types, same return values
+resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+    Model:    openai.ChatModelGPT4o,
+    Messages: []openai.ChatCompletionMessageParamUnion{
+        openai.UserMessage("hello"),
+    },
+})
+```
+
+Non-streaming requests get queued and polled automatically. Streaming and direct-proxied responses pass through as-is.
+
+See [`pkg/clients/openai/README.md`](pkg/clients/openai/README.md) for full docs.
 
 ## Development
 
