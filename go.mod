@@ -5,11 +5,12 @@ go 1.26
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
-	github.com/psyb0t/aichteeteapee v1.5.0
-	github.com/psyb0t/common-go v0.0.0-20260417235224-ecff9486d757
+	github.com/psyb0t/aichteeteapee v1.6.0
+	github.com/psyb0t/common-go v0.0.0-20260418041528-bedd5bc7b4bf
 	github.com/psyb0t/ctxerrors v0.2.3
 	github.com/psyb0t/gonfiguration v1.5.0
 	github.com/psyb0t/slog-configurator v1.0.0
+	github.com/redis/go-redis/v9 v9.18.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0
 )
@@ -193,7 +194,6 @@ require (
 	github.com/quasilyte/regex/syntax v0.0.0-20210819130434-b3f0c404a727 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
 	github.com/raeperd/recvcheck v0.2.0 // indirect
-	github.com/redis/go-redis/v9 v9.18.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect

@@ -20,6 +20,7 @@ import (
 	"github.com/psyb0t/ctxerrors"
 	"github.com/psyb0t/proxq/internal/config"
 	proxqproxy "github.com/psyb0t/proxq/internal/proxy"
+	"github.com/redis/go-redis/v9"
 )
 
 func Run() error {
@@ -53,24 +54,19 @@ func Run() error {
 	defer func() { _ = client.Close() }()
 	defer func() { _ = inspector.Close() }()
 
-	cacheCfg, err := cache.ParseConfig()
+	jobCache, cacheTTL, cacheCleanup, err := setupCache(cfg)
 	if err != nil {
-		return ctxerrors.Wrap(err, "parse cache config")
+		return err
 	}
 
-	jobCache, cleanup, err := cache.FromConfig(cacheCfg)
-	if err != nil {
-		return ctxerrors.Wrap(err, "create cache from config")
-	}
-
-	defer cleanup()
+	defer cacheCleanup()
 
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
 		runWorker(
 			ctx, redisOpt, cfg,
-			jobCache, cacheCfg.TTL,
+			jobCache, cacheTTL,
 		)
 	})
 
@@ -82,6 +78,35 @@ func Run() error {
 	wg.Wait()
 
 	return err
+}
+
+const cacheRedisKeyPrefix = "proxq:"
+
+func setupCache( //nolint:ireturn
+	cfg config.Config,
+) (cache.Cache, time.Duration, func(), error) {
+	cacheCfg, err := cache.ParseConfig()
+	if err != nil {
+		return nil, 0, nil, ctxerrors.Wrap(
+			err, "parse cache config",
+		)
+	}
+
+	cacheCfg.RedisKeyPrefix = cacheRedisKeyPrefix
+	cacheCfg.RedisClient = redis.NewClient(&redis.Options{
+		Addr:     cfg.RedisAddr,
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB,
+	})
+
+	c, cleanup, err := cache.New(cacheCfg)
+	if err != nil {
+		return nil, 0, nil, ctxerrors.Wrap(
+			err, "create cache from config",
+		)
+	}
+
+	return c, cacheCfg.TTL, cleanup, nil
 }
 
 func setupAsynq(

@@ -3,8 +3,12 @@ package cache
 import (
 	"container/list"
 	"context"
+	"log/slog"
 	"sync"
 	"time"
+
+	commonerrors "github.com/psyb0t/common-go/errors"
+	"github.com/psyb0t/ctxerrors"
 )
 
 const defaultCleanupInterval = 1 * time.Minute
@@ -21,6 +25,20 @@ type Memory struct {
 	evictList *list.List
 	maxSize   int
 	stopCh    chan struct{}
+}
+
+func toMemoryEntry(
+	elem *list.Element,
+) (*memoryEntry, error) {
+	entry, ok := elem.Value.(*memoryEntry)
+	if !ok {
+		return nil, ctxerrors.Wrap(
+			commonerrors.ErrInvalidValue,
+			"unexpected element type in cache list",
+		)
+	}
+
+	return entry, nil
 }
 
 func NewMemory(maxEntries int) *Memory {
@@ -48,7 +66,11 @@ func (m *Memory) Get(
 		return nil, ErrCacheMiss
 	}
 
-	entry := elem.Value.(*memoryEntry)
+	entry, err := toMemoryEntry(elem)
+	if err != nil {
+		return nil, err
+	}
+
 	if time.Now().After(entry.expiresAt) {
 		return nil, ErrCacheMiss
 	}
@@ -70,7 +92,11 @@ func (m *Memory) Set(
 	if elem, ok := m.items[key]; ok {
 		m.evictList.MoveToFront(elem)
 
-		entry := elem.Value.(*memoryEntry)
+		entry, err := toMemoryEntry(elem)
+		if err != nil {
+			return err
+		}
+
 		entry.value = val
 		entry.expiresAt = time.Now().Add(ttl)
 
@@ -78,7 +104,9 @@ func (m *Memory) Set(
 	}
 
 	for m.evictList.Len() >= m.maxSize {
-		m.evictOldest()
+		if err := m.evictOldest(); err != nil {
+			return err
+		}
 	}
 
 	entry := &memoryEntry{
@@ -100,11 +128,12 @@ func (m *Memory) Delete(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if elem, ok := m.items[key]; ok {
-		m.removeElement(elem)
+	elem, ok := m.items[key]
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return m.removeElement(elem)
 }
 
 func (m *Memory) Close() error {
@@ -113,20 +142,28 @@ func (m *Memory) Close() error {
 	return nil
 }
 
-func (m *Memory) evictOldest() {
+func (m *Memory) evictOldest() error {
 	elem := m.evictList.Back()
 	if elem == nil {
-		return
+		return nil
 	}
 
-	m.removeElement(elem)
+	return m.removeElement(elem)
 }
 
-func (m *Memory) removeElement(elem *list.Element) {
+func (m *Memory) removeElement(
+	elem *list.Element,
+) error {
 	m.evictList.Remove(elem)
 
-	entry := elem.Value.(*memoryEntry)
+	entry, err := toMemoryEntry(elem)
+	if err != nil {
+		return err
+	}
+
 	delete(m.items, entry.key)
+
+	return nil
 }
 
 func (m *Memory) cleanup() {
@@ -150,9 +187,22 @@ func (m *Memory) removeExpired() {
 	now := time.Now()
 
 	for _, elem := range m.items {
-		entry := elem.Value.(*memoryEntry)
+		entry, err := toMemoryEntry(elem)
+		if err != nil {
+			slog.Error("cache cleanup: bad element",
+				"error", err,
+			)
+
+			continue
+		}
+
 		if now.After(entry.expiresAt) {
-			m.removeElement(elem)
+			if err := m.removeElement(elem); err != nil {
+				slog.Error("cache cleanup: remove failed",
+					"error", err,
+					"key", entry.key,
+				)
+			}
 		}
 	}
 }

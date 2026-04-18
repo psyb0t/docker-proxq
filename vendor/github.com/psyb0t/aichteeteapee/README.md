@@ -61,31 +61,31 @@ wshub.UpgradeHandler(hub,
 Everything you need to stop hardcoding strings in your HTTP code.
 
 - **Content types** — `ContentTypeJSON`, `ContentTypeYAML`, `ContentTypeHTML`, `ContentTypeMultipartFormData`, etc.
-- **Header names** — every header as a constant: authentication, content negotiation, CORS, cache, security, hop-by-hop, rate limiting, WebSocket. Plus `AuthSchemeBearer` and `AuthSchemeBasic` for scheme prefixes.
-- **Error handling** — `ErrorCode` constants for every HTTP status, `ErrorCodeFromHTTPStatus()` mapper, sentinel errors (`ErrBadRequest`, `ErrNotFound`, ...), pre-built `ErrorResponse` structs.
+- **Header names** — every header you'll ever need as a constant. Authentication, content negotiation, CORS, cache, security, hop-by-hop, rate limiting, WebSocket, you name it. Plus `AuthSchemeBearer` and `AuthSchemeBasic` for scheme prefixes.
+- **Error handling** — `ErrorCode` constants for every HTTP status, `ErrorCodeFromHTTPStatus()` mapper, sentinel errors (`ErrBadRequest`, `ErrNotFound`, ...), pre-built `ErrorResponse` structs ready to serialize.
 - **Request utilities** — `GetClientIP(r)`, `GetRequestID(r)`, content type checkers (`IsRequestContentTypeJSON`, etc.).
 - **Response utilities** — `WriteJSON(w, statusCode, data)`.
 - **Network constants** — `SchemeHTTP`, `SchemeHTTPS`, `NetworkTypeTCP`, `NetworkTypeUnix`, etc.
 
 ### [`serbewr/`](docs/server.md) — HTTP server
 
-Pronounced "server". Built on `net/http` with Go 1.22+ `ServeMux` routing, grouped routes with per-group middleware, built-in handlers (health, echo, file upload), static file serving with directory indexing, TLS, and env-based config.
+Pronounced "server". D'oooh you kno. Built on `net/http` with Go 1.22+ `ServeMux` routing, grouped routes with per-group middleware, built-in handlers (health, echo, file upload), static file serving with directory indexing, TLS, and config from env vars or code. [Full docs](docs/server.md).
 
 ### [`serbewr/middleware/`](docs/middleware.md) — middleware stack
 
-RequestID, Logger, Recovery, BasicAuth, CORS, SecurityHeaders, Timeout, EnforceRequestContentType. All use context-propagated structured logging.
+RequestID, Logger, Recovery, BasicAuth, CORS, SecurityHeaders, Timeout, EnforceRequestContentType. All use context-propagated structured logging — set it up once, every log line gets the full request context for free. [Full docs](docs/middleware.md).
 
-### [`serbewr/prawxxey/`](docs/proxy.md) — HTTP request forwarding
+### [`serbewr/prawxxey/`](docs/proxy.md) — request forwarding
 
-Pronounced "proxy". Forward requests upstream with optional response caching, hop-by-hop header stripping, response size limits, and deterministic request fingerprinting.
+Pronounced "proxy", because of course it is. Forward requests upstream with optional response caching, hop-by-hop header stripping, response size limits, and deterministic request fingerprinting. [Full docs](docs/proxy.md).
 
 ### [`serbewr/dabluvee-es/`](docs/websocket.md) — WebSocket event system
 
-Pronounced "WS". Three-tier architecture (Hub -> Client -> Connection) with typed events, handler registration, broadcast, and a Unix socket bridge for external tool integration.
+Pronounced "WS" — because why stop at one wordplay. Three-tier architecture (Hub -> Client -> Connection) with typed events, handler registration, broadcast, and a Unix socket bridge for when you need to plug in external tools. [Full docs](docs/websocket.md).
 
 ### [`echo/`](docs/echo.md) — Echo framework integration
 
-Echo wrapper with auto-served OpenAPI specs and Swagger UI. Includes Bearer auth middleware and OpenAPI request validation via oapi-codegen.
+For when you want [labstack/echo](https://github.com/labstack/echo) instead of `net/http`. Wrapper with auto-served OpenAPI specs, Swagger UI, Bearer auth middleware, and OpenAPI request validation via oapi-codegen. [Full docs](docs/echo.md).
 
 ## Logging
 
@@ -95,6 +95,8 @@ The middleware chain builds up the logger progressively:
 1. **RequestID** adds `requestId` to the context logger
 2. **Logger** adds `method`, `path`, `ip`
 3. Downstream code calls `slogging.GetLogger(ctx)` and gets all fields automatically
+
+No explicit logger passing. Every log line from every middleware and handler automatically includes the full request context.
 
 ## Development
 

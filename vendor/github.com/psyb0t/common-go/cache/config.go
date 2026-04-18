@@ -9,12 +9,12 @@ import (
 )
 
 type Config struct {
-	Mode       string        `env:"CACHE_MODE"        default:"none"`
-	TTL        time.Duration `env:"CACHE_TTL"         default:"5m"`
-	MaxEntries int           `env:"CACHE_MAX_ENTRIES"  default:"10000"`
-	RedisAddr  string        `env:"CACHE_REDIS_ADDR"  default:"127.0.0.1:6379"`
-	RedisPass  string        `env:"CACHE_REDIS_PASSWORD"`
-	RedisDB    int           `env:"CACHE_REDIS_DB"    default:"0"`
+	Mode           string        `default:"none"               env:"CACHE_MODE"`
+	TTL            time.Duration `default:"5m"                 env:"CACHE_TTL"`
+	MaxEntries     int           `default:"10000"              env:"CACHE_MAX_ENTRIES"`
+	RedisKeyPrefix string        `env:"CACHE_REDIS_KEY_PREFIX"`
+
+	RedisClient redis.UniversalClient `env:"-"`
 }
 
 func ParseConfig() (Config, error) {
@@ -28,25 +28,25 @@ func ParseConfig() (Config, error) {
 	return cfg, nil
 }
 
-func FromConfig(cfg Config) (Cache, func(), error) {
+func New(cfg Config) (Cache, func(), error) { //nolint:ireturn
 	switch cfg.Mode {
 	case "memory":
 		c := NewMemory(cfg.MaxEntries)
 
 		return c, func() { _ = c.Close() }, nil
 	case "redis":
-		rc := redis.NewClient(&redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPass,
-			DB:       cfg.RedisDB,
-		})
+		if cfg.RedisClient == nil {
+			return nil, func() {}, ctxerrors.Wrap(
+				ErrInvalidCacheMode,
+				"redis client required for redis cache mode",
+			)
+		}
 
-		c := NewRedis(rc)
+		c := NewRedisWithPrefix(
+			cfg.RedisClient, cfg.RedisKeyPrefix,
+		)
 
-		return c, func() {
-			_ = c.Close()
-			_ = rc.Close()
-		}, nil
+		return c, func() { _ = c.Close() }, nil
 	case "none", "":
 		return nil, func() {}, nil
 	default:

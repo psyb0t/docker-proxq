@@ -117,9 +117,8 @@ Because why hit upstream twice when once was painful enough.
 | `CACHE_MODE` | `none` | `none` = no cache. `memory` = in-process LRU. `redis` = Redis-backed. |
 | `CACHE_TTL` | `5m` | How long cached responses stay fresh |
 | `CACHE_MAX_ENTRIES` | `10000` | Max entries for in-memory cache before LRU kicks the oldest out |
-| `CACHE_REDIS_ADDR` | `127.0.0.1:6379` | Separate Redis for cache (when `CACHE_MODE=redis`) |
-| `CACHE_REDIS_PASSWORD` | | Cache Redis password |
-| `CACHE_REDIS_DB` | `0` | Cache Redis DB |
+
+When `CACHE_MODE=redis`, cache uses the same Redis instance as the job queue (`PROXQ_REDIS_*`). Keys are namespaced under `proxq:cache:` so they don't collide with job data.
 
 Cache rules:
 - **Any method** gets cached. Same POST with the same body? Cache hit. Different body? Cache miss.

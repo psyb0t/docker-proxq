@@ -885,13 +885,13 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/psyb0t/aichteeteapee v1.5.0
+# github.com/psyb0t/aichteeteapee v1.6.0
 ## explicit; go 1.26
 github.com/psyb0t/aichteeteapee
 github.com/psyb0t/aichteeteapee/serbewr
 github.com/psyb0t/aichteeteapee/serbewr/middleware
 github.com/psyb0t/aichteeteapee/serbewr/prawxxey
-# github.com/psyb0t/common-go v0.0.0-20260417235224-ecff9486d757
+# github.com/psyb0t/common-go v0.0.0-20260418041528-bedd5bc7b4bf
 ## explicit; go 1.26
 github.com/psyb0t/common-go/cache
 github.com/psyb0t/common-go/errors
