@@ -18,7 +18,7 @@ jobs:
     with:
       repository_name: psyb0t/proxq
       target_platforms: "linux/amd64,linux/arm64"
-      scan_severity: "medium"
+      scan_severity: "high"
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
