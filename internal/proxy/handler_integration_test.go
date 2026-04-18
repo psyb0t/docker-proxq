@@ -430,7 +430,7 @@ func TestJobsHandler_Integration(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
-		var job JobInfo
+		var job jobInfo
 
 		err := json.Unmarshal(
 			rec.Body.Bytes(), &job,
@@ -511,4 +511,48 @@ func TestJobsHandler_Integration(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
+
+	t.Run("content pending job returns 404",
+		func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc(
+				"GET /__jobs/{id}/content",
+				jobsHandler.Content,
+			)
+
+			req := httptest.NewRequest(
+				http.MethodGet,
+				"/__jobs/"+taskID+"/content",
+				nil,
+			)
+			rec := httptest.NewRecorder()
+
+			mux.ServeHTTP(rec, req)
+
+			assert.Equal(
+				t, http.StatusNotFound, rec.Code,
+			)
+		})
+
+	t.Run("content nonexistent job returns 404",
+		func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc(
+				"GET /__jobs/{id}/content",
+				jobsHandler.Content,
+			)
+
+			req := httptest.NewRequest(
+				http.MethodGet,
+				"/__jobs/nope/content",
+				nil,
+			)
+			rec := httptest.NewRecorder()
+
+			mux.ServeHTTP(rec, req)
+
+			assert.Equal(
+				t, http.StatusNotFound, rec.Code,
+			)
+		})
 }

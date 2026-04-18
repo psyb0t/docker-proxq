@@ -5,8 +5,8 @@ go 1.26
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
-	github.com/psyb0t/aichteeteapee v1.6.0
-	github.com/psyb0t/common-go v0.0.0-20260418041528-bedd5bc7b4bf
+	github.com/psyb0t/aichteeteapee v1.7.0
+	github.com/psyb0t/common-go v0.0.0-20260418092513-56e604e3f58c
 	github.com/psyb0t/ctxerrors v0.2.3
 	github.com/psyb0t/gonfiguration v1.5.0
 	github.com/psyb0t/slog-configurator v1.0.0

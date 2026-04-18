@@ -97,6 +97,14 @@ func forwardWithCache(
 
 	storeInCache(ctx, cfg, key, result)
 
+	if result.Headers == nil {
+		result.Headers = make(map[string][]string)
+	}
+
+	result.Headers[aichteeteapee.HeaderNameXCacheStatus] = []string{
+		aichteeteapee.CacheStatusMiss,
+	}
+
 	return result, nil
 }
 
@@ -131,6 +139,14 @@ func tryCache(
 		"cacheKey", key,
 		"statusCode", result.StatusCode,
 	)
+
+	if result.Headers == nil {
+		result.Headers = make(map[string][]string)
+	}
+
+	result.Headers[aichteeteapee.HeaderNameXCacheStatus] = []string{
+		aichteeteapee.CacheStatusHit,
+	}
 
 	return &result, true
 }

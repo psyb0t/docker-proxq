@@ -92,14 +92,18 @@ func setupCache( //nolint:ireturn
 		)
 	}
 
-	cacheCfg.RedisKeyPrefix = cacheRedisKeyPrefix
-	cacheCfg.RedisClient = redis.NewClient(&redis.Options{
-		Addr:     cfg.RedisAddr,
-		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB,
-	})
+	opts := cache.Options{
+		Config: cacheCfg,
+		RedisClient: redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+		}),
+	}
 
-	c, cleanup, err := cache.New(cacheCfg)
+	opts.RedisKeyPrefix = cacheRedisKeyPrefix
+
+	c, cleanup, err := cache.New(opts)
 	if err != nil {
 		return nil, 0, nil, ctxerrors.Wrap(
 			err, "create cache from config",
@@ -177,6 +181,7 @@ func buildRouter(
 			MaxRequestBodySize:   cfg.MaxBodySize,
 			DirectProxyThreshold: cfg.DirectProxyThreshold,
 			DirectProxyPaths:     directProxyPaths,
+			DirectProxyMode:      cfg.DirectProxyMode,
 			Queue:                cfg.Queue,
 			TaskRetention:        cfg.TaskRetention,
 		},
@@ -186,8 +191,6 @@ func buildRouter(
 		inspector, cfg.Queue,
 	)
 
-	jobsPath := path.Join(cfg.JobsPath, "{id}")
-
 	return &serbewr.Router{
 		GlobalMiddlewares: []middleware.Middleware{
 			middleware.RequestID(),
@@ -196,25 +199,43 @@ func buildRouter(
 		},
 		Groups: []serbewr.GroupConfig{
 			{
-				Path: "/",
-				Routes: []serbewr.RouteConfig{
-					{
-						Method:  http.MethodGet,
-						Path:    jobsPath,
-						Handler: jobsHandler.Get,
-					},
-					{
-						Method:  http.MethodDelete,
-						Path:    jobsPath,
-						Handler: jobsHandler.Cancel,
-					},
-					{
-						Method:  "",
-						Path:    "/{path...}",
-						Handler: proxyHandler.ServeHTTP,
-					},
-				},
+				Path:   "/",
+				Routes: buildRoutes(cfg, proxyHandler, jobsHandler),
 			},
+		},
+	}
+}
+
+func buildRoutes(
+	cfg config.Config,
+	proxyHandler *proxqproxy.Handler,
+	jobsHandler *proxqproxy.JobsHandler,
+) []serbewr.RouteConfig {
+	jobsPath := path.Join(cfg.JobsPath, "{id}")
+	contentPath := path.Join(
+		cfg.JobsPath, "{id}", "content",
+	)
+
+	return []serbewr.RouteConfig{
+		{
+			Method:  http.MethodGet,
+			Path:    contentPath,
+			Handler: jobsHandler.Content,
+		},
+		{
+			Method:  http.MethodGet,
+			Path:    jobsPath,
+			Handler: jobsHandler.Get,
+		},
+		{
+			Method:  http.MethodDelete,
+			Path:    jobsPath,
+			Handler: jobsHandler.Cancel,
+		},
+		{
+			Method:  "",
+			Path:    "/{path...}",
+			Handler: proxyHandler.ServeHTTP,
 		},
 	}
 }

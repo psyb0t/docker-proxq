@@ -65,6 +65,7 @@ const (
 	HeaderNameIfUnmodSince = "If-Unmodified-Since"
 	HeaderNameLastModified = "Last-Modified"
 	HeaderNameAge          = "Age"
+	HeaderNameXCacheStatus = "X-Cache-Status"
 
 	// Hop-by-hop (RFC 2616 section 13.5.1) — must not be forwarded by proxies.
 	HeaderNameConnection         = "Connection"
@@ -117,4 +118,9 @@ const (
 	HeaderNameFrom       = "From"
 	HeaderNameRange      = "Range"
 	HeaderNameWarning    = "Warning"
+)
+
+const (
+	CacheStatusHit  = "HIT"
+	CacheStatusMiss = "MISS"
 )

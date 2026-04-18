@@ -13,8 +13,11 @@ type Config struct {
 	TTL            time.Duration `default:"5m"                 env:"CACHE_TTL"`
 	MaxEntries     int           `default:"10000"              env:"CACHE_MAX_ENTRIES"`
 	RedisKeyPrefix string        `env:"CACHE_REDIS_KEY_PREFIX"`
+}
 
-	RedisClient redis.UniversalClient `env:"-"`
+type Options struct {
+	Config
+	RedisClient redis.UniversalClient
 }
 
 func ParseConfig() (Config, error) {
@@ -28,14 +31,14 @@ func ParseConfig() (Config, error) {
 	return cfg, nil
 }
 
-func New(cfg Config) (Cache, func(), error) { //nolint:ireturn
-	switch cfg.Mode {
+func New(opts Options) (Cache, func(), error) { //nolint:ireturn
+	switch opts.Mode {
 	case "memory":
-		c := NewMemory(cfg.MaxEntries)
+		c := NewMemory(opts.MaxEntries)
 
 		return c, func() { _ = c.Close() }, nil
 	case "redis":
-		if cfg.RedisClient == nil {
+		if opts.RedisClient == nil {
 			return nil, func() {}, ctxerrors.Wrap(
 				ErrInvalidCacheMode,
 				"redis client required for redis cache mode",
@@ -43,7 +46,7 @@ func New(cfg Config) (Cache, func(), error) { //nolint:ireturn
 		}
 
 		c := NewRedisWithPrefix(
-			cfg.RedisClient, cfg.RedisKeyPrefix,
+			opts.RedisClient, opts.RedisKeyPrefix,
 		)
 
 		return c, func() { _ = c.Close() }, nil
@@ -52,7 +55,7 @@ func New(cfg Config) (Cache, func(), error) { //nolint:ireturn
 	default:
 		return nil, func() {}, ctxerrors.Wrap(
 			ErrInvalidCacheMode,
-			"unknown cache mode: "+cfg.Mode,
+			"unknown cache mode: "+opts.Mode,
 		)
 	}
 }

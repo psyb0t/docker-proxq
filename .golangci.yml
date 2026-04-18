@@ -95,6 +95,10 @@ linters:
       allow-first-in-block: true
       allow-whole-block: false
       branch-max-lines: 2
+    tagalign:
+      order:
+        - env
+        - default
     depguard:
       rules:
         main:

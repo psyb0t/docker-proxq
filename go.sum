@@ -566,10 +566,10 @@ github.com/prometheus/procfs v0.1.3/go.mod h1:lV6e/gmhEcM9IjHGsFOCxxuZ+z1YqCvr4O
 github.com/prometheus/procfs v0.6.0/go.mod h1:cz+aTbrPOrUb4q7XlbU9ygM+/jj0fzG6c1xBZuNvfVA=
 github.com/prometheus/procfs v0.7.3 h1:4jVXhlkAyzOScmCkXBTOLRLTz8EeU+eyjrwB/EPq0VU=
 github.com/prometheus/procfs v0.7.3/go.mod h1:cz+aTbrPOrUb4q7XlbU9ygM+/jj0fzG6c1xBZuNvfVA=
-github.com/psyb0t/aichteeteapee v1.6.0 h1:K3Rpp/B/3Lrfzny1GNebzwlQgVJPC8aWhoicUX+zxWA=
-github.com/psyb0t/aichteeteapee v1.6.0/go.mod h1:nF+FUwQ4WWHCFTj9KTn8n/0qonEDo+V06xXkpC5V3ac=
-github.com/psyb0t/common-go v0.0.0-20260418041528-bedd5bc7b4bf h1:W3+ounhomHYfmaB2FQ0tR3gG5/sCW/DirPn5F2YrtQU=
-github.com/psyb0t/common-go v0.0.0-20260418041528-bedd5bc7b4bf/go.mod h1:r+8xZVcaNWqOjprb8iWkofoicv53ksajf9DZRACm+3U=
+github.com/psyb0t/aichteeteapee v1.7.0 h1:DQQsXmPBRVptJAKcfRc4q5yA8hIARs8nz/mZJY4jznA=
+github.com/psyb0t/aichteeteapee v1.7.0/go.mod h1:nF+FUwQ4WWHCFTj9KTn8n/0qonEDo+V06xXkpC5V3ac=
+github.com/psyb0t/common-go v0.0.0-20260418092513-56e604e3f58c h1:ZtjEAzchAzFAm9TB8p/ZVZ5lgu7XTAJC2w6vHqLajoM=
+github.com/psyb0t/common-go v0.0.0-20260418092513-56e604e3f58c/go.mod h1:r+8xZVcaNWqOjprb8iWkofoicv53ksajf9DZRACm+3U=
 github.com/psyb0t/ctxerrors v0.2.3 h1:R4J6a/1bbM6WrBB6lo9ym0ZMSeCqQSKRdpRO3AXZjkA=
 github.com/psyb0t/ctxerrors v0.2.3/go.mod h1:LR4o9chgpVM7+jNHQ5L2jgyZ6FHLtP280KF9k0T9oQE=
 github.com/psyb0t/gonfiguration v1.5.0 h1:B+OrSE060/vgonFI8HKzchradwnEAGvgrNT5KKVXhdU=

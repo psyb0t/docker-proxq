@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 )
 
 const TaskTypeName = "proxy:request"
@@ -38,11 +37,19 @@ func StatusFromTaskState(s asynq.TaskState) Status {
 	return StatusFailed
 }
 
-type JobInfo struct {
-	ID          string                   `json:"id"`
-	Status      Status                   `json:"status"`
-	Result      *proxylib.ResponseResult `json:"result,omitempty"`
-	Error       string                   `json:"error,omitempty"`
-	CreatedAt   time.Time                `json:"createdAt,omitzero"`
-	CompletedAt time.Time                `json:"completedAt,omitzero"`
+type jobInfo struct {
+	ID          string    `json:"id"`
+	Status      Status    `json:"status"`
+	Error       string    `json:"error,omitempty"`
+	CreatedAt   time.Time `json:"createdAt,omitzero"`
+	CompletedAt time.Time `json:"completedAt,omitzero"`
+}
+
+type statusResponse struct {
+	Status string `json:"status"`
+}
+
+//nolint:gochecknoglobals
+var cancelledResponse = statusResponse{
+	Status: "cancelled",
 }

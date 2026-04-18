@@ -23,11 +23,19 @@ const (
 	defaultTaskRetention      = 1 * time.Hour
 )
 
+type DirectProxyMode = string
+
+const (
+	DirectProxyModeProxy    DirectProxyMode = "proxy"
+	DirectProxyModeRedirect DirectProxyMode = "redirect"
+)
+
 type HandlerConfig struct {
 	UpstreamURL          string
 	MaxRequestBodySize   int64
 	DirectProxyThreshold int64
 	DirectProxyPaths     []*regexp.Regexp
+	DirectProxyMode      string
 	Queue                string
 	TaskRetention        time.Duration
 }
@@ -40,6 +48,7 @@ type Handler struct {
 	maxRequestBodySize   int64
 	directProxyThreshold int64
 	directProxyPaths     []*regexp.Regexp
+	directProxyMode      string
 	reverseProxy         *httputil.ReverseProxy
 }
 
@@ -62,6 +71,11 @@ func NewHandler(
 		retention = defaultTaskRetention
 	}
 
+	proxyMode := cfg.DirectProxyMode
+	if proxyMode == "" {
+		proxyMode = DirectProxyModeProxy
+	}
+
 	h := &Handler{
 		client:               client,
 		upstreamURL:          cfg.UpstreamURL,
@@ -70,6 +84,7 @@ func NewHandler(
 		maxRequestBodySize:   maxBody,
 		directProxyThreshold: cfg.DirectProxyThreshold,
 		directProxyPaths:     cfg.DirectProxyPaths,
+		directProxyMode:      proxyMode,
 	}
 
 	h.reverseProxy = buildReverseProxy(cfg.UpstreamURL)
@@ -173,8 +188,24 @@ func (h *Handler) directProxy(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	logger := slogging.GetLogger(r.Context())
+
+	if h.directProxyMode == DirectProxyModeRedirect {
+		target := h.upstreamURL + r.RequestURI
+
+		logger.Debug("redirecting to upstream",
+			"target", target,
+		)
+
+		http.Redirect(
+			w, r, target,
+			http.StatusTemporaryRedirect,
+		)
+
+		return
+	}
+
 	if h.reverseProxy == nil {
-		logger := slogging.GetLogger(r.Context())
 		logger.Error("reverse proxy not configured")
 		proxylib.WriteError(
 			w, http.StatusBadGateway,
@@ -183,7 +214,6 @@ func (h *Handler) directProxy(
 		return
 	}
 
-	logger := slogging.GetLogger(r.Context())
 	logger.Debug("direct proxying request",
 		"content_length", r.ContentLength,
 		"chunked", isChunkedTransfer(r),

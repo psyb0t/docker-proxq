@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee"
 	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 	"github.com/psyb0t/common-go/slogging"
+	"github.com/psyb0t/ctxerrors"
 )
 
 type JobsHandler struct {
@@ -46,6 +46,102 @@ func (h *JobsHandler) Get(
 		return
 	}
 
+	info, err := h.getTaskInfo(w, r, id)
+	if err != nil {
+		return
+	}
+
+	job := jobInfo{
+		ID:          info.ID,
+		Status:      StatusFromTaskState(info.State),
+		Error:       info.LastErr,
+		CompletedAt: info.CompletedAt,
+	}
+
+	aichteeteapee.WriteJSON(w, http.StatusOK, job)
+}
+
+func (h *JobsHandler) Content(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	id := extractJobID(r)
+	if id == "" {
+		aichteeteapee.WriteJSON(
+			w,
+			http.StatusBadRequest,
+			aichteeteapee.ErrorResponseBadRequest,
+		)
+
+		return
+	}
+
+	info, err := h.getTaskInfo(w, r, id)
+	if err != nil {
+		return
+	}
+
+	status := StatusFromTaskState(info.State)
+	if status != StatusCompleted {
+		aichteeteapee.WriteJSON(
+			w,
+			http.StatusNotFound,
+			aichteeteapee.ErrorResponseNotFound,
+		)
+
+		return
+	}
+
+	if len(info.Result) == 0 {
+		proxylib.WriteError(
+			w, http.StatusInternalServerError,
+		)
+
+		return
+	}
+
+	var result proxylib.ResponseResult
+	if err := json.Unmarshal(
+		info.Result, &result,
+	); err != nil {
+		logger := slogging.GetLogger(r.Context())
+		logger.Error(
+			"failed to unmarshal result",
+			"job_id", id,
+			"error", err,
+		)
+		proxylib.WriteError(
+			w, http.StatusInternalServerError,
+		)
+
+		return
+	}
+
+	writeUpstreamResponse(w, &result)
+}
+
+func writeUpstreamResponse(
+	w http.ResponseWriter,
+	result *proxylib.ResponseResult,
+) {
+	for key, vals := range result.Headers {
+		for _, v := range vals {
+			w.Header().Add(key, v)
+		}
+	}
+
+	w.WriteHeader(result.StatusCode)
+
+	if len(result.Body) > 0 {
+		_, _ = w.Write(result.Body)
+	}
+}
+
+func (h *JobsHandler) getTaskInfo(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) (*asynq.TaskInfo, error) {
 	info, err := h.inspector.GetTaskInfo(
 		h.queue, id,
 	)
@@ -56,7 +152,7 @@ func (h *JobsHandler) Get(
 			aichteeteapee.ErrorResponseNotFound,
 		)
 
-		return
+		return nil, ctxerrors.Wrap(err, "task not found")
 	}
 
 	if err != nil {
@@ -70,26 +166,10 @@ func (h *JobsHandler) Get(
 			w, http.StatusInternalServerError,
 		)
 
-		return
+		return nil, ctxerrors.Wrap(err, "get task info")
 	}
 
-	job := JobInfo{
-		ID:          info.ID,
-		Status:      StatusFromTaskState(info.State),
-		Error:       info.LastErr,
-		CompletedAt: info.CompletedAt,
-	}
-
-	if len(info.Result) > 0 {
-		var result proxylib.ResponseResult
-		if err := json.Unmarshal(
-			info.Result, &result,
-		); err == nil {
-			job.Result = &result
-		}
-	}
-
-	aichteeteapee.WriteJSON(w, http.StatusOK, job)
+	return info, nil
 }
 
 func (h *JobsHandler) Cancel(
@@ -146,18 +226,10 @@ func (h *JobsHandler) Cancel(
 	aichteeteapee.WriteJSON(
 		w,
 		http.StatusOK,
-		map[string]string{"status": "cancelled"},
+		cancelledResponse,
 	)
 }
 
 func extractJobID(r *http.Request) string {
-	if id := r.PathValue("id"); id != "" {
-		return id
-	}
-
-	path := strings.TrimPrefix(
-		r.URL.Path, "/__jobs/",
-	)
-
-	return strings.TrimSuffix(path, "/")
+	return r.PathValue("id")
 }

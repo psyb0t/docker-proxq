@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,62 +41,55 @@ func TestNewJobsHandler(t *testing.T) {
 func TestExtractJobID(t *testing.T) {
 	tests := []struct {
 		name     string
+		pattern  string
 		path     string
 		expected string
 	}{
 		{
-			name:     "id from path",
-			path:     "/__jobs/abc-123",
+			name:     "extracts id",
+			pattern:  "GET /{id}",
+			path:     "/abc-123",
 			expected: "abc-123",
 		},
 		{
-			name:     "id with trailing slash",
-			path:     "/__jobs/xyz-456/",
-			expected: "xyz-456",
+			name:     "uuid id",
+			pattern:  "GET /{id}",
+			path:     "/550e8400-e29b-41d4-a716-446655440000",
+			expected: "550e8400-e29b-41d4-a716-446655440000",
 		},
 		{
-			name:     "empty id",
-			path:     "/__jobs/",
+			name:     "no path value returns empty",
+			pattern:  "GET /other",
+			path:     "/other",
 			expected: "",
-		},
-		{
-			name:     "non-jobs path",
-			path:     "/other/path",
-			expected: "/other/path",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var gotID string
+
+			mux := http.NewServeMux()
+			mux.HandleFunc(
+				tt.pattern,
+				func(
+					_ http.ResponseWriter,
+					r *http.Request,
+				) {
+					gotID = extractJobID(r)
+				},
+			)
+
 			req := httptest.NewRequest(
 				http.MethodGet, tt.path, nil,
 			)
-			assert.Equal(
-				t, tt.expected, extractJobID(req),
+			mux.ServeHTTP(
+				httptest.NewRecorder(), req,
 			)
+
+			assert.Equal(t, tt.expected, gotID)
 		})
 	}
-}
-
-func TestExtractJobID_PathValue(t *testing.T) {
-	mux := http.NewServeMux()
-
-	var gotID string
-
-	mux.HandleFunc(
-		"GET /__jobs/{id}",
-		func(_ http.ResponseWriter, r *http.Request) {
-			gotID = extractJobID(r)
-		},
-	)
-
-	req := httptest.NewRequest(
-		http.MethodGet, "/__jobs/uuid-here", nil,
-	)
-
-	mux.ServeHTTP(httptest.NewRecorder(), req)
-
-	assert.Equal(t, "uuid-here", gotID)
 }
 
 func TestJobsHandler_EmptyID(t *testing.T) {
@@ -110,6 +104,11 @@ func TestJobsHandler_EmptyID(t *testing.T) {
 			name:    "get returns bad request",
 			method:  http.MethodGet,
 			handler: h.Get,
+		},
+		{
+			name:    "content returns bad request",
+			method:  http.MethodGet,
+			handler: h.Content,
 		},
 		{
 			name:    "cancel returns bad request",
@@ -130,6 +129,68 @@ func TestJobsHandler_EmptyID(t *testing.T) {
 			assert.Equal(
 				t, http.StatusBadRequest, rec.Code,
 			)
+		})
+	}
+}
+
+func TestWriteUpstreamResponse(t *testing.T) {
+	tests := []struct {
+		name          string
+		result        *proxylib.ResponseResult
+		expectCode    int
+		expectBody    string
+		expectHeaders map[string]string
+	}{
+		{
+			name: "200 with body and headers",
+			result: &proxylib.ResponseResult{
+				StatusCode: http.StatusOK,
+				Headers: map[string][]string{
+					"Content-Type": {"application/json"},
+					"X-Custom":     {"val"},
+				},
+				Body: []byte(`{"ok":true}`),
+			},
+			expectCode: http.StatusOK,
+			expectBody: `{"ok":true}`,
+			expectHeaders: map[string]string{
+				"Content-Type": "application/json",
+				"X-Custom":     "val",
+			},
+		},
+		{
+			name: "500 from upstream",
+			result: &proxylib.ResponseResult{
+				StatusCode: http.StatusInternalServerError,
+				Body:       []byte("error"),
+			},
+			expectCode: http.StatusInternalServerError,
+			expectBody: "error",
+		},
+		{
+			name: "204 no body",
+			result: &proxylib.ResponseResult{
+				StatusCode: http.StatusNoContent,
+			},
+			expectCode: http.StatusNoContent,
+			expectBody: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+
+			writeUpstreamResponse(rec, tt.result)
+
+			assert.Equal(t, tt.expectCode, rec.Code)
+			assert.Equal(
+				t, tt.expectBody, rec.Body.String(),
+			)
+
+			for k, v := range tt.expectHeaders {
+				assert.Equal(t, v, rec.Header().Get(k))
+			}
 		})
 	}
 }
