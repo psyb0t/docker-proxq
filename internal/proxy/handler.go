@@ -16,44 +16,27 @@ import (
 	proxylib "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 	"github.com/psyb0t/common-go/slogging"
 	"github.com/psyb0t/ctxerrors"
+	"github.com/psyb0t/proxq/internal/config"
 )
 
-const (
-	defaultMaxRequestBodySize = 10 << 20 // 10MB
-	defaultTaskRetention      = 1 * time.Hour
-)
+const defaultTaskRetention = 1 * time.Hour
 
-type DirectProxyMode = string
-
-const (
-	DirectProxyModeProxy    DirectProxyMode = "proxy"
-	DirectProxyModeRedirect DirectProxyMode = "redirect"
-)
-
-type PathFilterMode = string
-
-const (
-	PathFilterModeBlacklist PathFilterMode = "blacklist"
-	PathFilterModeWhitelist PathFilterMode = "whitelist"
-)
-
-type HandlerConfig struct {
-	UpstreamURL          string
-	MaxRequestBodySize   int64
+type UpstreamConfig struct {
+	Prefix               string
+	URL                  string
+	Timeout              time.Duration
+	MaxBodySize          int64
 	DirectProxyThreshold int64
 	DirectProxyMode      string
 	PathFilter           []*regexp.Regexp
 	PathFilterMode       string
-	Queue                string
-	TaskRetention        time.Duration
 }
 
-type Handler struct {
-	client               *asynq.Client
-	upstreamURL          string
-	queue                string
-	taskRetention        time.Duration
-	maxRequestBodySize   int64
+type upstream struct {
+	prefix               string
+	url                  string
+	timeout              time.Duration
+	maxBodySize          int64
 	directProxyThreshold int64
 	directProxyMode      string
 	pathFilter           []*regexp.Regexp
@@ -61,15 +44,23 @@ type Handler struct {
 	reverseProxy         *httputil.ReverseProxy
 }
 
+type HandlerConfig struct {
+	Upstreams     []UpstreamConfig
+	Queue         string
+	TaskRetention time.Duration
+}
+
+type Handler struct {
+	client        *asynq.Client
+	queue         string
+	taskRetention time.Duration
+	upstreams     []upstream
+}
+
 func NewHandler(
 	client *asynq.Client,
 	cfg HandlerConfig,
 ) *Handler {
-	maxBody := cfg.MaxRequestBodySize
-	if maxBody == 0 {
-		maxBody = defaultMaxRequestBodySize
-	}
-
 	queue := cfg.Queue
 	if queue == "" {
 		queue = DefaultQueue
@@ -80,37 +71,36 @@ func NewHandler(
 		retention = defaultTaskRetention
 	}
 
-	proxyMode := cfg.DirectProxyMode
-	if proxyMode == "" {
-		proxyMode = DirectProxyModeProxy
+	upstreams := make(
+		[]upstream, 0, len(cfg.Upstreams),
+	)
+
+	for _, uc := range cfg.Upstreams {
+		upstreams = append(upstreams, upstream{
+			prefix:               uc.Prefix,
+			url:                  strings.TrimRight(uc.URL, "/"),
+			timeout:              uc.Timeout,
+			maxBodySize:          uc.MaxBodySize,
+			directProxyThreshold: uc.DirectProxyThreshold,
+			directProxyMode:      uc.DirectProxyMode,
+			pathFilter:           uc.PathFilter,
+			pathFilterMode:       uc.PathFilterMode,
+			reverseProxy:         buildReverseProxy(uc.URL),
+		})
 	}
 
-	filterMode := cfg.PathFilterMode
-	if filterMode == "" {
-		filterMode = PathFilterModeBlacklist
+	return &Handler{
+		client:        client,
+		queue:         queue,
+		taskRetention: retention,
+		upstreams:     upstreams,
 	}
-
-	h := &Handler{
-		client:               client,
-		upstreamURL:          cfg.UpstreamURL,
-		queue:                queue,
-		taskRetention:        retention,
-		maxRequestBodySize:   maxBody,
-		directProxyThreshold: cfg.DirectProxyThreshold,
-		directProxyMode:      proxyMode,
-		pathFilter:           cfg.PathFilter,
-		pathFilterMode:       filterMode,
-	}
-
-	h.reverseProxy = buildReverseProxy(cfg.UpstreamURL)
-
-	return h
 }
 
 func buildReverseProxy(
-	upstream string,
+	rawURL string,
 ) *httputil.ReverseProxy {
-	target, err := url.Parse(upstream)
+	target, err := url.Parse(rawURL)
 	if err != nil {
 		return nil
 	}
@@ -147,19 +137,56 @@ func (h *Handler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	u, strippedURI := h.resolveUpstream(r)
+	if u == nil {
+		proxylib.WriteError(
+			w, http.StatusBadGateway,
+		)
+
+		return
+	}
+
 	if isWebSocketUpgrade(r) {
-		h.proxyWebSocket(w, r)
+		h.proxyWebSocket(w, r, u)
 
 		return
 	}
 
-	if h.shouldBypassQueue(r) {
-		h.directProxy(w, r)
+	if shouldBypassQueue(r, u) {
+		h.directProxy(w, r, u, strippedURI)
 
 		return
 	}
 
-	h.enqueueRequest(w, r)
+	h.enqueueRequest(w, r, u, strippedURI)
+}
+
+func (h *Handler) resolveUpstream(
+	r *http.Request,
+) (*upstream, string) {
+	path := r.URL.Path
+
+	for i := range h.upstreams {
+		u := &h.upstreams[i]
+
+		if u.prefix == "/" {
+			return u, r.RequestURI
+		}
+
+		if path == u.prefix ||
+			strings.HasPrefix(path, u.prefix+"/") {
+			stripped := strings.TrimPrefix(
+				r.RequestURI, u.prefix,
+			)
+			if stripped == "" {
+				stripped = "/"
+			}
+
+			return u, stripped
+		}
+	}
+
+	return nil, ""
 }
 
 func isChunkedTransfer(r *http.Request) bool {
@@ -172,25 +199,27 @@ func isChunkedTransfer(r *http.Request) bool {
 	return false
 }
 
-func (h *Handler) shouldBypassQueue(
+func shouldBypassQueue(
 	r *http.Request,
+	u *upstream,
 ) bool {
 	if isChunkedTransfer(r) {
 		return true
 	}
 
-	if h.directProxyThreshold > 0 &&
-		r.ContentLength > h.directProxyThreshold {
+	if u.directProxyThreshold > 0 &&
+		r.ContentLength > u.directProxyThreshold {
 		return true
 	}
 
-	return h.pathFilterBypasses(r.URL.Path)
+	return pathFilterBypasses(r.URL.Path, u)
 }
 
-func (h *Handler) matchesPathFilter(
+func matchesPathFilter(
 	path string,
+	patterns []*regexp.Regexp,
 ) bool {
-	for _, re := range h.pathFilter {
+	for _, re := range patterns {
 		if re.MatchString(path) {
 			return true
 		}
@@ -199,17 +228,18 @@ func (h *Handler) matchesPathFilter(
 	return false
 }
 
-func (h *Handler) pathFilterBypasses(
+func pathFilterBypasses(
 	path string,
+	u *upstream,
 ) bool {
-	if len(h.pathFilter) == 0 {
+	if len(u.pathFilter) == 0 {
 		return false
 	}
 
-	matches := h.matchesPathFilter(path)
+	matches := matchesPathFilter(path, u.pathFilter)
 
-	switch h.pathFilterMode {
-	case PathFilterModeWhitelist:
+	switch u.pathFilterMode {
+	case config.PathFilterModeWhitelist:
 		return !matches
 	default:
 		return matches
@@ -219,11 +249,13 @@ func (h *Handler) pathFilterBypasses(
 func (h *Handler) directProxy(
 	w http.ResponseWriter,
 	r *http.Request,
+	u *upstream,
+	strippedURI string,
 ) {
 	logger := slogging.GetLogger(r.Context())
 
-	if h.directProxyMode == DirectProxyModeRedirect {
-		target := h.upstreamURL + r.RequestURI
+	if u.directProxyMode == config.DirectProxyModeRedirect {
+		target := u.url + strippedURI
 
 		logger.Debug("redirecting to upstream",
 			"target", target,
@@ -237,7 +269,7 @@ func (h *Handler) directProxy(
 		return
 	}
 
-	if h.reverseProxy == nil {
+	if u.reverseProxy == nil {
 		logger.Error("reverse proxy not configured")
 		proxylib.WriteError(
 			w, http.StatusBadGateway,
@@ -247,11 +279,12 @@ func (h *Handler) directProxy(
 	}
 
 	logger.Debug("direct proxying request",
+		"upstream", u.prefix,
 		"content_length", r.ContentLength,
-		"chunked", isChunkedTransfer(r),
 	)
 
-	h.reverseProxy.ServeHTTP(w, r)
+	r.URL.Path = stripPrefix(r.URL.Path, u.prefix)
+	u.reverseProxy.ServeHTTP(w, r)
 }
 
 func isWebSocketUpgrade(r *http.Request) bool {
@@ -271,8 +304,9 @@ func isWebSocketUpgrade(r *http.Request) bool {
 func (h *Handler) proxyWebSocket(
 	w http.ResponseWriter,
 	r *http.Request,
+	u *upstream,
 ) {
-	if h.reverseProxy == nil {
+	if u.reverseProxy == nil {
 		logger := slogging.GetLogger(r.Context())
 		logger.Error(
 			"websocket proxy not configured",
@@ -285,19 +319,24 @@ func (h *Handler) proxyWebSocket(
 	}
 
 	logger := slogging.GetLogger(r.Context())
-	logger.Debug("proxying websocket connection")
+	logger.Debug("proxying websocket connection",
+		"upstream", u.prefix,
+	)
 
-	h.reverseProxy.ServeHTTP(w, r)
+	r.URL.Path = stripPrefix(r.URL.Path, u.prefix)
+	u.reverseProxy.ServeHTTP(w, r)
 }
 
 func (h *Handler) enqueueRequest(
 	w http.ResponseWriter,
 	r *http.Request,
+	u *upstream,
+	strippedURI string,
 ) {
 	logger := slogging.GetLogger(r.Context())
 
 	body, err := io.ReadAll(
-		io.LimitReader(r.Body, h.maxRequestBodySize),
+		io.LimitReader(r.Body, u.maxBodySize),
 	)
 	if err != nil {
 		logger.Error(
@@ -313,14 +352,14 @@ func (h *Handler) enqueueRequest(
 
 	payload := proxylib.RequestPayload{
 		Method:   r.Method,
-		URL:      h.upstreamURL + r.RequestURI,
+		URL:      u.url + strippedURI,
 		Headers:  r.Header,
 		Body:     body,
 		ClientIP: aichteeteapee.GetClientIP(r),
 		Proto:    proxylib.RequestScheme(r),
 	}
 
-	taskID, err := h.enqueue(r, payload)
+	taskID, err := h.enqueue(r, payload, u.timeout)
 	if err != nil {
 		logger.Error(
 			"failed to enqueue task",
@@ -343,6 +382,7 @@ func (h *Handler) enqueueRequest(
 func (h *Handler) enqueue(
 	r *http.Request,
 	payload proxylib.RequestPayload,
+	timeout time.Duration,
 ) (string, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -354,13 +394,21 @@ func (h *Handler) enqueue(
 	taskID := uuid.New().String()
 	task := asynq.NewTask(TaskTypeName, data)
 
-	_, err = h.client.EnqueueContext(
-		r.Context(),
-		task,
+	opts := []asynq.Option{
 		asynq.TaskID(taskID),
 		asynq.Queue(h.queue),
 		asynq.MaxRetry(0),
 		asynq.Retention(h.taskRetention),
+	}
+
+	if timeout > 0 {
+		opts = append(opts, asynq.Timeout(timeout))
+	}
+
+	_, err = h.client.EnqueueContext(
+		r.Context(),
+		task,
+		opts...,
 	)
 	if err != nil {
 		return "", ctxerrors.Wrap(
@@ -369,4 +417,17 @@ func (h *Handler) enqueue(
 	}
 
 	return taskID, nil
+}
+
+func stripPrefix(path, prefix string) string {
+	if prefix == "/" {
+		return path
+	}
+
+	stripped := strings.TrimPrefix(path, prefix)
+	if stripped == "" {
+		return "/"
+	}
+
+	return stripped
 }

@@ -11,23 +11,26 @@ import (
 )
 
 func TestJobLifecycle(t *testing.T) {
-	e := setup(t, "none", nil)
+	e := setup(t, setupOpts{})
 	defer e.cleanup()
 
 	tests := []struct {
 		name       string
 		url        string
 		expectCode int
+		hasSource  bool
 	}{
 		{
 			name:       "status of nonexistent job",
 			url:        "/__jobs/nonexistent-id",
 			expectCode: http.StatusNotFound,
+			hasSource:  true,
 		},
 		{
 			name:       "content of nonexistent job",
 			url:        "/__jobs/nonexistent-id/content",
 			expectCode: http.StatusNotFound,
+			hasSource:  true,
 		},
 	}
 
@@ -45,12 +48,19 @@ func TestJobLifecycle(t *testing.T) {
 			assert.Equal(
 				t, tt.expectCode, resp.StatusCode,
 			)
+
+			if tt.hasSource {
+				assert.Equal(
+					t, "proxq",
+					resp.Header.Get("X-Proxq-Source"),
+				)
+			}
 		})
 	}
 }
 
 func TestCancelJob(t *testing.T) {
-	e := setup(t, "none", nil)
+	e := setup(t, setupOpts{})
 	defer e.cleanup()
 
 	jobID := submitJob(
@@ -89,8 +99,8 @@ func TestCancelJob(t *testing.T) {
 }
 
 func TestCustomJobsPath(t *testing.T) {
-	e := setup(t, "none", map[string]string{
-		"PROXQ_JOBS_PATH": "/status",
+	e := setup(t, setupOpts{
+		extraConfig: `jobsPath: "/status"`,
 	})
 	defer e.cleanup()
 
@@ -113,4 +123,29 @@ func TestCustomJobsPath(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestContentPending_HasProxqSourceHeader(
+	t *testing.T,
+) {
+	e := setup(t, setupOpts{})
+	defer e.cleanup()
+
+	jobID := submitJob(
+		t, e.proxqURL,
+		http.MethodGet, "/slow",
+		nil,
+	)
+
+	resp := getContent(t, e.proxqURL, jobID, "")
+
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(
+		t, http.StatusNotFound, resp.StatusCode,
+	)
+	assert.Equal(
+		t, "proxq",
+		resp.Header.Get("X-Proxq-Source"),
+	)
 }

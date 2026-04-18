@@ -1,7 +1,7 @@
 IMAGE_NAME       := psyb0t/proxq
 TAG              := latest
 TEST_TAG         := $(TAG)-test
-MIN_TEST_COVERAGE := 85
+MIN_TEST_COVERAGE := 90
 
 .PHONY: all build build-test dep lint lint-fix test test-coverage clean help
 
@@ -26,10 +26,13 @@ test: ## Run tests
 	@echo "Running tests..."
 	@go test -race ./...
 
+SHELL := /bin/bash
+
 test-coverage: ## Run tests with coverage check. Fails if coverage is below the threshold.
 	@echo "Running tests with coverage check..."
 	@trap 'rm -f coverage.txt' EXIT; \
-	go test -race -coverprofile=coverage.txt ./internal/config/... ./internal/proxy/...; \
+	packages=$$(go list ./... | grep -v /internal/app | grep -v /internal/testinfra | grep -v /cmd | grep -v /tests); \
+	go test -race -coverprofile=coverage.txt $$packages; \
 	if [ $$? -ne 0 ]; then \
 		echo "Test failed. Exiting."; \
 		exit 1; \

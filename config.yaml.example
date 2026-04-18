@@ -1,0 +1,42 @@
+# Single upstream (root prefix allowed)
+#
+# upstreams:
+#   - prefix: "/"
+#     url: "http://backend:8080"
+
+# Multiple upstreams (no root prefix, no overlapping prefixes)
+
+listenAddress: "0.0.0.0:8080"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+queue: "default"
+concurrency: 10
+jobsPath: "/__jobs"
+taskRetention: "1h"
+
+cache:
+  mode: "none"       # none, memory, redis
+  ttl: "5m"
+  maxEntries: 10000
+  redisKeyPrefix: "proxq:"
+
+upstreams:
+  - prefix: "/api"
+    url: "http://api-server:3000"
+    timeout: "5m"
+    maxBodySize: 10485760
+    directProxyThreshold: 10485760
+    directProxyMode: "proxy"   # proxy or redirect
+    pathFilter:
+      mode: "blacklist"        # blacklist or whitelist
+      patterns: []
+
+  - prefix: "/uploads"
+    url: "http://file-server:8080/storage"
+    timeout: "10m"
+    maxBodySize: 1073741824
+    directProxyThreshold: 0    # always queue

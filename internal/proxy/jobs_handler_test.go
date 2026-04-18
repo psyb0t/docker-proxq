@@ -133,6 +133,17 @@ func TestJobsHandler_EmptyID(t *testing.T) {
 	}
 }
 
+func TestSetProxqSourceHeader(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	setProxqSourceHeader(rec)
+
+	assert.Equal(
+		t, HeaderValueProxq,
+		rec.Header().Get(HeaderNameXProxqSource),
+	)
+}
+
 func TestWriteUpstreamResponse(t *testing.T) {
 	tests := []struct {
 		name          string

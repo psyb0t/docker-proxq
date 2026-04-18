@@ -12,6 +12,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee"
+	"github.com/psyb0t/proxq/internal/config"
 	"github.com/psyb0t/proxq/internal/testinfra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,22 @@ func setupRedis(
 	require.NoError(t, err)
 
 	return redis, func() { redis.Teardown(ctx) }
+}
+
+func singleUpstreamCfg(
+	url, queue string,
+) HandlerConfig {
+	return HandlerConfig{
+		Queue:         queue,
+		TaskRetention: 10 * time.Minute,
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:      "/",
+				URL:         url,
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+		},
+	}
 }
 
 func TestHandler_ServeHTTP(t *testing.T) {
@@ -75,7 +92,6 @@ func TestHandler_ServeHTTP(t *testing.T) {
 			name:      "GET without body",
 			method:    http.MethodGet,
 			path:      "/health",
-			body:      "",
 			upstream:  "http://backend:9090",
 			queue:     "q2",
 			expectURL: "http://backend:9090/health",
@@ -96,11 +112,12 @@ func TestHandler_ServeHTTP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(client, HandlerConfig{
-				UpstreamURL:   tt.upstream,
-				Queue:         tt.queue,
-				TaskRetention: 10 * time.Minute,
-			})
+			h := NewHandler(
+				client,
+				singleUpstreamCfg(
+					tt.upstream, tt.queue,
+				),
+			)
 
 			req := httptest.NewRequest(
 				tt.method, tt.path,
@@ -155,21 +172,135 @@ func TestHandler_ServeHTTP(t *testing.T) {
 	}
 }
 
+func TestHandler_ServeHTTP_MultiUpstream(
+	t *testing.T,
+) {
+	redis, cleanup := setupRedis(t)
+	defer cleanup()
+
+	client := asynq.NewClient(redis.RedisOpt())
+
+	defer func() { _ = client.Close() }()
+
+	inspector := asynq.NewInspector(redis.RedisOpt())
+
+	defer func() { _ = inspector.Close() }()
+
+	h := NewHandler(client, HandlerConfig{
+		Queue:         "multi",
+		TaskRetention: 10 * time.Minute,
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:      "/api",
+				URL:         "http://api:3000",
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+			{
+				Prefix:      "/",
+				URL:         "http://default:8080",
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+		},
+	})
+
+	tests := []struct {
+		name      string
+		path      string
+		expectURL string
+	}{
+		{
+			name:      "routes to /api upstream",
+			path:      "/api/users",
+			expectURL: "http://api:3000/users",
+		},
+		{
+			name:      "routes to default upstream",
+			path:      "/other",
+			expectURL: "http://default:8080/other",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(
+				http.MethodGet, tt.path, nil,
+			)
+			rec := httptest.NewRecorder()
+
+			h.ServeHTTP(rec, req)
+
+			assert.Equal(
+				t, http.StatusAccepted, rec.Code,
+			)
+
+			var resp acceptedResponse
+
+			require.NoError(t, json.Unmarshal(
+				rec.Body.Bytes(), &resp,
+			))
+
+			info, err := inspector.GetTaskInfo(
+				"multi", resp.JobID,
+			)
+			require.NoError(t, err)
+
+			var payload struct {
+				URL string `json:"url"`
+			}
+
+			require.NoError(t, json.Unmarshal(
+				info.Payload, &payload,
+			))
+			assert.Equal(t, tt.expectURL, payload.URL)
+		})
+	}
+}
+
+func TestHandler_ServeHTTP_NoUpstreamMatch(
+	t *testing.T,
+) {
+	h := NewHandler(nil, HandlerConfig{
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:      "/api",
+				URL:         "http://api:3000",
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/other", nil,
+	)
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusBadGateway, rec.Code,
+	)
+}
+
 func TestHandler_ServeHTTP_WebSocketProxy(
 	t *testing.T,
 ) {
 	upgraded := make(chan struct{})
 
-	upstream := httptest.NewServer(
+	upstreamSrv := httptest.NewServer(
 		http.HandlerFunc(func(
 			w http.ResponseWriter,
 			r *http.Request,
 		) {
 			if strings.EqualFold(
-				r.Header.Get(aichteeteapee.HeaderNameUpgrade), "websocket",
+				r.Header.Get(
+					aichteeteapee.HeaderNameUpgrade,
+				),
+				"websocket",
 			) {
 				close(upgraded)
-				w.WriteHeader(http.StatusSwitchingProtocols)
+				w.WriteHeader(
+					http.StatusSwitchingProtocols,
+				)
 
 				return
 			}
@@ -177,10 +308,12 @@ func TestHandler_ServeHTTP_WebSocketProxy(
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
-	defer upstream.Close()
+	defer upstreamSrv.Close()
 
 	h := NewHandler(nil, HandlerConfig{
-		UpstreamURL: upstream.URL,
+		Upstreams: []UpstreamConfig{
+			{Prefix: "/", URL: upstreamSrv.URL},
+		},
 	})
 
 	req := httptest.NewRequest(
@@ -204,38 +337,12 @@ func TestHandler_ServeHTTP_WebSocketProxy(
 	}
 }
 
-func TestHandler_ServeHTTP_WebSocketNilProxy(
-	t *testing.T,
-) {
-	h := &Handler{
-		reverseProxy: nil,
-	}
-
-	req := httptest.NewRequest(
-		http.MethodGet, "/ws", nil,
-	)
-	req.Header.Set(
-		aichteeteapee.HeaderNameConnection, "upgrade",
-	)
-	req.Header.Set(
-		aichteeteapee.HeaderNameUpgrade, "websocket",
-	)
-
-	rec := httptest.NewRecorder()
-
-	h.ServeHTTP(rec, req)
-
-	assert.Equal(
-		t, http.StatusBadGateway, rec.Code,
-	)
-}
-
 func TestHandler_ServeHTTP_DirectProxyChunked(
 	t *testing.T,
 ) {
 	received := make(chan string, 1)
 
-	upstream := httptest.NewServer(
+	upstreamSrv := httptest.NewServer(
 		http.HandlerFunc(func(
 			w http.ResponseWriter,
 			r *http.Request,
@@ -246,14 +353,17 @@ func TestHandler_ServeHTTP_DirectProxyChunked(
 			_, _ = w.Write([]byte("proxied"))
 		}),
 	)
-	defer upstream.Close()
+	defer upstreamSrv.Close()
 
 	h := NewHandler(nil, HandlerConfig{
-		UpstreamURL: upstream.URL,
+		Upstreams: []UpstreamConfig{
+			{Prefix: "/", URL: upstreamSrv.URL},
+		},
 	})
 
 	req := httptest.NewRequest(
-		http.MethodPost, "/upload", strings.NewReader("data"),
+		http.MethodPost, "/upload",
+		strings.NewReader("data"),
 	)
 	req.TransferEncoding = []string{"chunked"}
 
@@ -277,7 +387,7 @@ func TestHandler_ServeHTTP_DirectProxyLargeBody(
 ) {
 	received := make(chan bool, 1)
 
-	upstream := httptest.NewServer(
+	upstreamSrv := httptest.NewServer(
 		http.HandlerFunc(func(
 			w http.ResponseWriter,
 			_ *http.Request,
@@ -287,11 +397,16 @@ func TestHandler_ServeHTTP_DirectProxyLargeBody(
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
-	defer upstream.Close()
+	defer upstreamSrv.Close()
 
 	h := NewHandler(nil, HandlerConfig{
-		UpstreamURL:          upstream.URL,
-		DirectProxyThreshold: 100,
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:               "/",
+				URL:                  upstreamSrv.URL,
+				DirectProxyThreshold: 100,
+			},
+		},
 	})
 
 	req := httptest.NewRequest(
@@ -312,34 +427,17 @@ func TestHandler_ServeHTTP_DirectProxyLargeBody(
 	}
 }
 
-func TestHandler_ServeHTTP_DirectProxyNilProxy(
-	t *testing.T,
-) {
-	h := &Handler{
-		reverseProxy:         nil,
-		directProxyThreshold: 100,
-	}
-
-	req := httptest.NewRequest(
-		http.MethodPost, "/big",
-		strings.NewReader(strings.Repeat("x", 200)),
-	)
-	req.ContentLength = 200
-
-	rec := httptest.NewRecorder()
-
-	h.ServeHTTP(rec, req)
-
-	assert.Equal(
-		t, http.StatusBadGateway, rec.Code,
-	)
-}
-
 func TestHandler_ServeHTTP_ReadBodyError(
 	t *testing.T,
 ) {
 	h := NewHandler(nil, HandlerConfig{
-		UpstreamURL: "http://upstream",
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:      "/",
+				URL:         "http://upstream",
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+		},
 	})
 
 	req := httptest.NewRequest(
@@ -367,7 +465,13 @@ func TestHandler_ServeHTTP_EnqueueError(
 	defer func() { _ = client.Close() }()
 
 	h := NewHandler(client, HandlerConfig{
-		UpstreamURL: "http://upstream",
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:      "/",
+				URL:         "http://upstream",
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+		},
 	})
 
 	req := httptest.NewRequest(
@@ -379,6 +483,132 @@ func TestHandler_ServeHTTP_EnqueueError(
 
 	assert.Equal(
 		t, http.StatusInternalServerError, rec.Code,
+	)
+}
+
+func TestHandler_DirectProxyRedirectMode(
+	t *testing.T,
+) {
+	h := NewHandler(nil, HandlerConfig{
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:               "/",
+				URL:                  "http://upstream:3000/base",
+				DirectProxyThreshold: 10,
+				DirectProxyMode:      config.DirectProxyModeRedirect,
+				MaxBodySize:          config.DefaultMaxBodySize,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost, "/path?q=1",
+		strings.NewReader(strings.Repeat("x", 20)),
+	)
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusTemporaryRedirect, rec.Code,
+	)
+	assert.Equal(
+		t, "http://upstream:3000/base/path?q=1",
+		rec.Header().Get("Location"),
+	)
+}
+
+func TestHandler_DirectProxyRedirect_PrefixStrip(
+	t *testing.T,
+) {
+	h := NewHandler(nil, HandlerConfig{
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:               "/api",
+				URL:                  "http://backend:3000",
+				DirectProxyThreshold: 10,
+				DirectProxyMode:      config.DirectProxyModeRedirect,
+				MaxBodySize:          config.DefaultMaxBodySize,
+			},
+			{
+				Prefix:      "/",
+				URL:         "http://default:8080",
+				MaxBodySize: config.DefaultMaxBodySize,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost, "/api/users?page=2",
+		strings.NewReader(strings.Repeat("x", 20)),
+	)
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusTemporaryRedirect, rec.Code,
+	)
+	assert.Equal(
+		t, "http://backend:3000/users?page=2",
+		rec.Header().Get("Location"),
+	)
+}
+
+func TestHandler_WebSocketNilProxy(t *testing.T) {
+	h := &Handler{
+		upstreams: []upstream{
+			{
+				prefix:       "/",
+				reverseProxy: nil,
+			},
+		},
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/ws", nil,
+	)
+	req.Header.Set(
+		aichteeteapee.HeaderNameConnection, "upgrade",
+	)
+	req.Header.Set(
+		aichteeteapee.HeaderNameUpgrade, "websocket",
+	)
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusBadGateway, rec.Code,
+	)
+}
+
+func TestHandler_DirectProxyNilReverseProxy(
+	t *testing.T,
+) {
+	h := &Handler{
+		upstreams: []upstream{
+			{
+				prefix:               "/",
+				directProxyThreshold: 10,
+				directProxyMode:      config.DirectProxyModeProxy,
+				reverseProxy:         nil,
+			},
+		},
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost, "/big",
+		strings.NewReader(strings.Repeat("x", 20)),
+	)
+
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(
+		t, http.StatusBadGateway, rec.Code,
 	)
 }
 
@@ -456,6 +686,10 @@ func TestJobsHandler_Integration(t *testing.T) {
 		mux.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Equal(
+			t, HeaderValueProxq,
+			rec.Header().Get(HeaderNameXProxqSource),
+		)
 	})
 
 	t.Run("cancel existing job", func(t *testing.T) {
@@ -493,26 +727,7 @@ func TestJobsHandler_Integration(t *testing.T) {
 		assert.ErrorIs(t, err, asynq.ErrTaskNotFound)
 	})
 
-	t.Run("cancel nonexistent job", func(t *testing.T) {
-		mux := http.NewServeMux()
-		mux.HandleFunc(
-			"DELETE /__jobs/{id}",
-			jobsHandler.Cancel,
-		)
-
-		req := httptest.NewRequest(
-			http.MethodDelete,
-			"/__jobs/nope",
-			nil,
-		)
-		rec := httptest.NewRecorder()
-
-		mux.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusNotFound, rec.Code)
-	})
-
-	t.Run("content pending job returns 404",
+	t.Run("content pending has proxq source header",
 		func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc(
@@ -532,9 +747,15 @@ func TestJobsHandler_Integration(t *testing.T) {
 			assert.Equal(
 				t, http.StatusNotFound, rec.Code,
 			)
+			assert.Equal(
+				t, HeaderValueProxq,
+				rec.Header().Get(
+					HeaderNameXProxqSource,
+				),
+			)
 		})
 
-	t.Run("content nonexistent job returns 404",
+	t.Run("content nonexistent has proxq source header",
 		func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc(
@@ -553,6 +774,40 @@ func TestJobsHandler_Integration(t *testing.T) {
 
 			assert.Equal(
 				t, http.StatusNotFound, rec.Code,
+			)
+			assert.Equal(
+				t, HeaderValueProxq,
+				rec.Header().Get(
+					HeaderNameXProxqSource,
+				),
+			)
+		})
+
+	t.Run("cancel nonexistent has proxq source header",
+		func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc(
+				"DELETE /__jobs/{id}",
+				jobsHandler.Cancel,
+			)
+
+			req := httptest.NewRequest(
+				http.MethodDelete,
+				"/__jobs/nope",
+				nil,
+			)
+			rec := httptest.NewRecorder()
+
+			mux.ServeHTTP(rec, req)
+
+			assert.Equal(
+				t, http.StatusNotFound, rec.Code,
+			)
+			assert.Equal(
+				t, HeaderValueProxq,
+				rec.Header().Get(
+					HeaderNameXProxqSource,
+				),
 			)
 		})
 }

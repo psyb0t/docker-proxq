@@ -83,6 +83,8 @@ func (h *JobsHandler) Content(
 
 	status := StatusFromTaskState(info.State)
 	if status != StatusCompleted {
+		setProxqSourceHeader(w)
+
 		aichteeteapee.WriteJSON(
 			w,
 			http.StatusNotFound,
@@ -145,7 +147,10 @@ func (h *JobsHandler) getTaskInfo(
 	info, err := h.inspector.GetTaskInfo(
 		h.queue, id,
 	)
-	if errors.Is(err, asynq.ErrTaskNotFound) {
+	if errors.Is(err, asynq.ErrTaskNotFound) ||
+		errors.Is(err, asynq.ErrQueueNotFound) {
+		setProxqSourceHeader(w)
+
 		aichteeteapee.WriteJSON(
 			w,
 			http.StatusNotFound,
@@ -201,6 +206,8 @@ func (h *JobsHandler) Cancel(
 
 	err := h.inspector.DeleteTask(h.queue, id)
 	if errors.Is(err, asynq.ErrTaskNotFound) {
+		setProxqSourceHeader(w)
+
 		aichteeteapee.WriteJSON(
 			w,
 			http.StatusNotFound,
@@ -232,4 +239,10 @@ func (h *JobsHandler) Cancel(
 
 func extractJobID(r *http.Request) string {
 	return r.PathValue("id")
+}
+
+func setProxqSourceHeader(w http.ResponseWriter) {
+	w.Header().Set(
+		HeaderNameXProxqSource, HeaderValueProxq,
+	)
 }

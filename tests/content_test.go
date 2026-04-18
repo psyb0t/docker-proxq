@@ -15,7 +15,7 @@ import (
 )
 
 func TestContentTypes(t *testing.T) {
-	e := setup(t, "none", nil)
+	e := setup(t, setupOpts{})
 	defer e.cleanup()
 
 	tests := []struct {
@@ -170,7 +170,7 @@ func TestContentTypes(t *testing.T) {
 }
 
 func TestHeadersForwarded(t *testing.T) {
-	e := setup(t, "none", nil)
+	e := setup(t, setupOpts{})
 	defer e.cleanup()
 
 	jobID := submitJob(
@@ -203,7 +203,7 @@ func TestHeadersForwarded(t *testing.T) {
 }
 
 func TestTextResponseCustomHeaders(t *testing.T) {
-	e := setup(t, "none", nil)
+	e := setup(t, setupOpts{})
 	defer e.cleanup()
 
 	jobID := submitJob(
@@ -222,5 +222,34 @@ func TestTextResponseCustomHeaders(t *testing.T) {
 
 	assert.Equal(
 		t, "hello", resp.Header.Get("X-Custom"),
+	)
+}
+
+func TestUpstream404_NoProxqSourceHeader(
+	t *testing.T,
+) {
+	e := setup(t, setupOpts{})
+	defer e.cleanup()
+
+	jobID := submitJob(
+		t, e.proxqURL,
+		http.MethodGet, "/status/404",
+		nil,
+	)
+
+	pollStatus(
+		t, e.proxqURL, jobID, "", 30*time.Second,
+	)
+
+	resp := getContent(t, e.proxqURL, jobID, "")
+
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(
+		t, http.StatusNotFound, resp.StatusCode,
+	)
+	assert.Empty(
+		t, resp.Header.Get("X-Proxq-Source"),
+		"upstream 404 must not have X-Proxq-Source",
 	)
 }

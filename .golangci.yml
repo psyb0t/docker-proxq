@@ -111,6 +111,7 @@ linters:
             - github.com/redis/
             - github.com/testcontainers/
             - github.com/docker/
+            - gopkg.in/yaml.v3
 
   exclusions:
     generated: lax

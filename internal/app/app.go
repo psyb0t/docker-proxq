@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"regexp"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -23,24 +21,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func Run() error {
-	cfg, err := config.Parse()
+func Run(configPath string) error {
+	cfg, err := config.Parse(configPath)
 	if err != nil {
 		return ctxerrors.Wrap(err, "parse config")
-	}
-
-	if cfg.UpstreamURL == "" {
-		slog.Error("PROXQ_UPSTREAM_URL is required")
-		os.Exit(1)
-	}
-
-	pathFilter, err := parsePathFilter(
-		cfg.PathFilter,
-	)
-	if err != nil {
-		return ctxerrors.Wrap(
-			err, "parse path filter",
-		)
 	}
 
 	ctx, stop := signal.NotifyContext(
@@ -64,62 +48,50 @@ func Run() error {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		runWorker(
-			ctx, redisOpt, cfg,
-			jobCache, cacheTTL,
-		)
+		runWorker(ctx, redisOpt, cfg, jobCache, cacheTTL)
 	})
 
-	err = startHTTPServer(
-		ctx, cfg, client, inspector,
-		pathFilter,
-	)
+	err = startHTTPServer(ctx, cfg, client, inspector)
 
 	wg.Wait()
 
 	return err
 }
 
-const cacheRedisKeyPrefix = "proxq:"
-
 func setupCache( //nolint:ireturn
 	cfg config.Config,
 ) (cache.Cache, time.Duration, func(), error) {
-	cacheCfg, err := cache.ParseConfig()
-	if err != nil {
-		return nil, 0, nil, ctxerrors.Wrap(
-			err, "parse cache config",
-		)
-	}
-
 	opts := cache.Options{
-		Config: cacheCfg,
+		Config: cache.Config{
+			Mode:           cfg.Cache.Mode,
+			TTL:            cfg.Cache.TTL.Std(),
+			MaxEntries:     cfg.Cache.MaxEntries,
+			RedisKeyPrefix: cfg.Cache.RedisKeyPrefix,
+		},
 		RedisClient: redis.NewClient(&redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-			DB:       cfg.RedisDB,
+			Addr:     cfg.Redis.Addr,
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
 		}),
 	}
-
-	opts.RedisKeyPrefix = cacheRedisKeyPrefix
 
 	c, cleanup, err := cache.New(opts)
 	if err != nil {
 		return nil, 0, nil, ctxerrors.Wrap(
-			err, "create cache from config",
+			err, "create cache",
 		)
 	}
 
-	return c, cacheCfg.TTL, cleanup, nil
+	return c, cfg.Cache.TTL.Std(), cleanup, nil
 }
 
 func setupAsynq(
 	cfg config.Config,
 ) (asynq.RedisClientOpt, *asynq.Client, *asynq.Inspector) {
 	redisOpt := asynq.RedisClientOpt{
-		Addr:     cfg.RedisAddr,
-		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB,
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
 	}
 
 	return redisOpt,
@@ -136,9 +108,8 @@ func runWorker(
 ) {
 	worker := proxqproxy.NewWorker(
 		proxqproxy.WorkerConfig{
-			UpstreamTimeout: cfg.UpstreamTimeout,
-			Cache:           jobCache,
-			CacheTTL:        cacheTTL,
+			Cache:    jobCache,
+			CacheTTL: cacheTTL,
 		},
 	)
 
@@ -168,23 +139,44 @@ func runWorker(
 	}
 }
 
+func buildUpstreamConfigs(
+	cfg config.Config,
+) []proxqproxy.UpstreamConfig {
+	upstreams := make(
+		[]proxqproxy.UpstreamConfig,
+		0, len(cfg.Upstreams),
+	)
+
+	for _, u := range cfg.Upstreams {
+		upstreams = append(
+			upstreams,
+			proxqproxy.UpstreamConfig{
+				Prefix:               u.Prefix,
+				URL:                  u.URL,
+				Timeout:              u.Timeout.Std(),
+				MaxBodySize:          u.MaxBodySize,
+				DirectProxyThreshold: u.DirectProxyThreshold,
+				DirectProxyMode:      u.DirectProxyMode,
+				PathFilter:           u.CompiledPatterns,
+				PathFilterMode:       u.PathFilter.Mode,
+			},
+		)
+	}
+
+	return upstreams
+}
+
 func buildRouter(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
-	pathFilter []*regexp.Regexp,
 ) *serbewr.Router {
 	proxyHandler := proxqproxy.NewHandler(
 		client,
 		proxqproxy.HandlerConfig{
-			UpstreamURL:          cfg.UpstreamURL,
-			MaxRequestBodySize:   cfg.MaxBodySize,
-			DirectProxyThreshold: cfg.DirectProxyThreshold,
-			DirectProxyMode:      cfg.DirectProxyMode,
-			PathFilter:           pathFilter,
-			PathFilterMode:       cfg.PathFilterMode,
-			Queue:                cfg.Queue,
-			TaskRetention:        cfg.TaskRetention,
+			Upstreams:     buildUpstreamConfigs(cfg),
+			Queue:         cfg.Queue,
+			TaskRetention: cfg.TaskRetention.Std(),
 		},
 	)
 
@@ -200,8 +192,10 @@ func buildRouter(
 		},
 		Groups: []serbewr.GroupConfig{
 			{
-				Path:   "/",
-				Routes: buildRoutes(cfg, proxyHandler, jobsHandler),
+				Path: "/",
+				Routes: buildRoutes(
+					cfg, proxyHandler, jobsHandler,
+				),
 			},
 		},
 	}
@@ -246,7 +240,6 @@ func startHTTPServer(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
-	pathFilter []*regexp.Regexp,
 ) error {
 	srv, err := serbewr.NewWithConfig(serbewr.Config{
 		ListenAddress: cfg.ListenAddress,
@@ -255,42 +248,11 @@ func startHTTPServer(
 		return ctxerrors.Wrap(err, "create server")
 	}
 
-	router := buildRouter(
-		cfg, client, inspector, pathFilter,
-	)
+	router := buildRouter(cfg, client, inspector)
 
 	if err = srv.Start(ctx, router); err != nil {
 		return ctxerrors.Wrap(err, "start server")
 	}
 
 	return nil
-}
-
-func parsePathFilter(
-	raw string,
-) ([]*regexp.Regexp, error) {
-	if raw == "" {
-		return nil, nil
-	}
-
-	parts := strings.Split(raw, ",")
-	patterns := make([]*regexp.Regexp, 0, len(parts))
-
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-
-		re, err := regexp.Compile(p)
-		if err != nil {
-			return nil, ctxerrors.Wrap(
-				err, "compile regex: "+p,
-			)
-		}
-
-		patterns = append(patterns, re)
-	}
-
-	return patterns, nil
 }

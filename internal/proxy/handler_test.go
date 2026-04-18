@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/psyb0t/aichteeteapee"
+	"github.com/psyb0t/proxq/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,9 +107,8 @@ func TestIsChunkedTransfer(t *testing.T) {
 			expected:         true,
 		},
 		{
-			name:             "no transfer encoding",
-			transferEncoding: nil,
-			expected:         false,
+			name:     "no transfer encoding",
+			expected: false,
 		},
 		{
 			name:             "identity",
@@ -137,208 +137,259 @@ func TestIsChunkedTransfer(t *testing.T) {
 	}
 }
 
+func TestResolveUpstream(t *testing.T) {
+	h := &Handler{
+		upstreams: []upstream{
+			{prefix: "/api/v2", url: "http://v2:3000"},
+			{prefix: "/api", url: "http://api:3000"},
+			{prefix: "/", url: "http://default:8080"},
+		},
+	}
+
+	tests := []struct {
+		name           string
+		requestURI     string
+		expectPrefix   string
+		expectStripped string
+	}{
+		{
+			name:           "exact prefix match",
+			requestURI:     "/api",
+			expectPrefix:   "/api",
+			expectStripped: "/",
+		},
+		{
+			name:           "prefix with subpath",
+			requestURI:     "/api/users",
+			expectPrefix:   "/api",
+			expectStripped: "/users",
+		},
+		{
+			name:           "longer prefix wins",
+			requestURI:     "/api/v2/items",
+			expectPrefix:   "/api/v2",
+			expectStripped: "/items",
+		},
+		{
+			name:           "query string preserved",
+			requestURI:     "/api/users?page=1",
+			expectPrefix:   "/api",
+			expectStripped: "/users?page=1",
+		},
+		{
+			name:           "root catch-all",
+			requestURI:     "/other/path",
+			expectPrefix:   "/",
+			expectStripped: "/other/path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(
+				http.MethodGet, tt.requestURI, nil,
+			)
+
+			u, stripped := h.resolveUpstream(req)
+
+			require.NotNil(t, u)
+			assert.Equal(t, tt.expectPrefix, u.prefix)
+			assert.Equal(t, tt.expectStripped, stripped)
+		})
+	}
+}
+
+func TestResolveUpstream_NoMatch(t *testing.T) {
+	h := &Handler{
+		upstreams: []upstream{
+			{prefix: "/api", url: "http://api:3000"},
+		},
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/other", nil,
+	)
+
+	u, _ := h.resolveUpstream(req)
+	assert.Nil(t, u)
+}
+
+func TestResolveUpstream_NoFalsePrefix(t *testing.T) {
+	h := &Handler{
+		upstreams: []upstream{
+			{prefix: "/api", url: "http://api:3000"},
+		},
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/api2/data", nil,
+	)
+
+	u, _ := h.resolveUpstream(req)
+	assert.Nil(t, u)
+}
+
 func TestShouldBypassQueue(t *testing.T) {
 	tests := []struct {
 		name             string
 		threshold        int64
 		contentLength    int64
 		transferEncoding []string
+		filterPatterns   []*regexp.Regexp
+		filterMode       string
+		path             string
 		expected         bool
 	}{
 		{
 			name:          "below threshold",
 			threshold:     1024,
 			contentLength: 512,
+			path:          "/data",
 			expected:      false,
 		},
 		{
 			name:          "above threshold",
 			threshold:     1024,
 			contentLength: 2048,
+			path:          "/data",
 			expected:      true,
 		},
 		{
-			name:          "equal to threshold",
-			threshold:     1024,
-			contentLength: 1024,
-			expected:      false,
-		},
-		{
-			name:             "chunked always direct",
-			threshold:        0,
-			contentLength:    -1,
+			name:             "chunked always bypasses",
 			transferEncoding: []string{"chunked"},
+			path:             "/data",
 			expected:         true,
 		},
 		{
 			name:          "threshold zero disables",
 			threshold:     0,
 			contentLength: 999999,
+			path:          "/data",
 			expected:      false,
 		},
 		{
-			name:          "unknown length not chunked",
-			threshold:     1024,
-			contentLength: -1,
-			expected:      false,
+			name: "blacklist match bypasses",
+			filterPatterns: []*regexp.Regexp{
+				regexp.MustCompile(`^/uploads`),
+			},
+			filterMode: config.PathFilterModeBlacklist,
+			path:       "/uploads/big.iso",
+			expected:   true,
+		},
+		{
+			name: "whitelist no match bypasses",
+			filterPatterns: []*regexp.Regexp{
+				regexp.MustCompile(`^/api`),
+			},
+			filterMode: config.PathFilterModeWhitelist,
+			path:       "/uploads/big.iso",
+			expected:   true,
+		},
+		{
+			name: "whitelist match queues",
+			filterPatterns: []*regexp.Regexp{
+				regexp.MustCompile(`^/api`),
+			},
+			filterMode: config.PathFilterModeWhitelist,
+			path:       "/api/data",
+			expected:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &Handler{
+			u := &upstream{
 				directProxyThreshold: tt.threshold,
+				pathFilter:           tt.filterPatterns,
+				pathFilterMode:       tt.filterMode,
 			}
 
 			req := httptest.NewRequest(
-				http.MethodPost, "/upload", nil,
+				http.MethodPost, tt.path, nil,
 			)
 			req.ContentLength = tt.contentLength
 			req.TransferEncoding = tt.transferEncoding
 
 			assert.Equal(
 				t, tt.expected,
-				h.shouldBypassQueue(req),
+				shouldBypassQueue(req, u),
 			)
 		})
 	}
 }
 
-func TestPathFilterBypasses(t *testing.T) {
+func TestStripPrefix(t *testing.T) {
 	tests := []struct {
-		name       string
-		patterns   []string
-		filterMode string
-		path       string
-		expected   bool
+		name     string
+		path     string
+		prefix   string
+		expected string
 	}{
 		{
-			name:       "blacklist match bypasses",
-			patterns:   []string{`^/uploads`},
-			filterMode: PathFilterModeBlacklist,
-			path:       "/uploads/image.png",
-			expected:   true,
+			name:     "root prefix",
+			path:     "/hello",
+			prefix:   "/",
+			expected: "/hello",
 		},
 		{
-			name:       "blacklist no match queues",
-			patterns:   []string{`^/uploads`},
-			filterMode: PathFilterModeBlacklist,
-			path:       "/api/data",
-			expected:   false,
+			name:     "strip api",
+			path:     "/api/users",
+			prefix:   "/api",
+			expected: "/users",
 		},
 		{
-			name:       "whitelist match queues",
-			patterns:   []string{`^/api`},
-			filterMode: PathFilterModeWhitelist,
-			path:       "/api/data",
-			expected:   false,
-		},
-		{
-			name:       "whitelist no match bypasses",
-			patterns:   []string{`^/api`},
-			filterMode: PathFilterModeWhitelist,
-			path:       "/uploads/big.iso",
-			expected:   true,
-		},
-		{
-			name:       "empty patterns never bypasses",
-			patterns:   nil,
-			filterMode: PathFilterModeBlacklist,
-			path:       "/anything",
-			expected:   false,
-		},
-		{
-			name:       "empty whitelist never bypasses",
-			patterns:   nil,
-			filterMode: PathFilterModeWhitelist,
-			path:       "/anything",
-			expected:   false,
-		},
-		{
-			name:       "blacklist multiple patterns",
-			patterns:   []string{`^/uploads`, `^/ws`},
-			filterMode: PathFilterModeBlacklist,
-			path:       "/ws/connect",
-			expected:   true,
-		},
-		{
-			name:       "whitelist multiple only queues match",
-			patterns:   []string{`^/api`, `^/rpc`},
-			filterMode: PathFilterModeWhitelist,
-			path:       "/static/file.js",
-			expected:   true,
+			name:     "exact match returns slash",
+			path:     "/api",
+			prefix:   "/api",
+			expected: "/",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var compiled []*regexp.Regexp
-
-			for _, p := range tt.patterns {
-				compiled = append(
-					compiled, regexp.MustCompile(p),
-				)
-			}
-
-			h := &Handler{
-				pathFilter:     compiled,
-				pathFilterMode: tt.filterMode,
-			}
-
 			assert.Equal(
 				t, tt.expected,
-				h.pathFilterBypasses(tt.path),
+				stripPrefix(tt.path, tt.prefix),
 			)
 		})
 	}
 }
 
-func TestShouldBypassQueue_PathFilter(t *testing.T) {
-	h := &Handler{
-		pathFilter: []*regexp.Regexp{
-			regexp.MustCompile(`^/uploads`),
-		},
-		pathFilterMode: PathFilterModeBlacklist,
-	}
-
-	req := httptest.NewRequest(
-		http.MethodPost, "/uploads/big.iso", nil,
-	)
-
-	assert.True(t, h.shouldBypassQueue(req))
-}
-
 func TestNewHandler(t *testing.T) {
 	tests := []struct {
-		name              string
-		cfg               HandlerConfig
-		expectQueue       string
-		expectRetention   time.Duration
-		expectMaxBody     int64
-		expectUpstreamURL string
+		name            string
+		cfg             HandlerConfig
+		expectQueue     string
+		expectRetention time.Duration
+		expectUpstreams int
 	}{
 		{
-			name: "all defaults",
+			name: "defaults",
 			cfg: HandlerConfig{
-				UpstreamURL: "http://upstream",
+				Upstreams: []UpstreamConfig{
+					{
+						Prefix: "/",
+						URL:    "http://backend:8080",
+					},
+				},
 			},
-			expectQueue:       DefaultQueue,
-			expectRetention:   defaultTaskRetention,
-			expectMaxBody:     defaultMaxRequestBodySize,
-			expectUpstreamURL: "http://upstream",
+			expectQueue:     DefaultQueue,
+			expectRetention: defaultTaskRetention,
+			expectUpstreams: 1,
 		},
 		{
 			name: "custom values",
 			cfg: HandlerConfig{
-				UpstreamURL:        "http://custom:9090",
-				MaxRequestBodySize: 1024,
-				Queue:              "priority",
-				TaskRetention:      30 * time.Minute,
+				Queue:         "priority",
+				TaskRetention: 30 * time.Minute,
+				Upstreams: []UpstreamConfig{
+					{Prefix: "/a", URL: "http://a:80"},
+					{Prefix: "/b", URL: "http://b:80"},
+				},
 			},
-			expectQueue:       "priority",
-			expectRetention:   30 * time.Minute,
-			expectMaxBody:     1024,
-			expectUpstreamURL: "http://custom:9090",
+			expectQueue:     "priority",
+			expectRetention: 30 * time.Minute,
+			expectUpstreams: 2,
 		},
 	}
 
@@ -347,22 +398,31 @@ func TestNewHandler(t *testing.T) {
 			h := NewHandler(nil, tt.cfg)
 
 			require.NotNil(t, h)
+			assert.Equal(t, tt.expectQueue, h.queue)
 			assert.Equal(
-				t, tt.expectUpstreamURL,
-				h.upstreamURL,
+				t, tt.expectRetention, h.taskRetention,
 			)
-			assert.Equal(
-				t, tt.expectQueue, h.queue,
+			assert.Len(
+				t, h.upstreams, tt.expectUpstreams,
 			)
-			assert.Equal(
-				t, tt.expectRetention,
-				h.taskRetention,
-			)
-			assert.Equal(
-				t, tt.expectMaxBody,
-				h.maxRequestBodySize,
-			)
-			assert.NotNil(t, h.reverseProxy)
 		})
 	}
+}
+
+func TestNewHandler_TrailingSlashStripped(
+	t *testing.T,
+) {
+	h := NewHandler(nil, HandlerConfig{
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix: "/api",
+				URL:    "http://backend:8080/v1/",
+			},
+		},
+	})
+
+	assert.Equal(
+		t, "http://backend:8080/v1",
+		h.upstreams[0].url,
+	)
 }

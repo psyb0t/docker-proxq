@@ -14,10 +14,6 @@ Oh, and it caches too. Because hitting the same endpoint twice is for people who
 - [What it actually does](#what-it-actually-does)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
-  - [The important one](#the-important-one)
-  - [Proxy settings](#proxy-settings)
-  - [Caching](#caching)
-  - [HTTP server](#http-server)
 - [API](#api)
   - [Send a request](#send-a-request-any-method-any-path)
   - [Check job status](#check-job-status)
@@ -55,10 +51,11 @@ You              proxq            Redis          Your API
 Most requests go through the meat grinder:
 
 1. **Accept** — proxq takes your HTTP request (any method, any path, any body)
-2. **Queue** — shoves it into Redis via [asynq](https://github.com/hibiken/asynq) and immediately hands you a job ID
-3. **Forward** — a worker picks it up and fires it at the upstream server with all your original headers, body, and proxy headers (`X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`)
-4. **Store** — the upstream response (status, headers, body) gets saved as the job result
-5. **Poll** — you come back whenever you want and grab the result
+2. **Route** — matches the request path to an upstream via longest-prefix match
+3. **Queue** — shoves it into Redis via [asynq](https://github.com/hibiken/asynq) and immediately hands you a job ID
+4. **Forward** — a worker picks it up and fires it at the upstream server with all your original headers, body, and proxy headers (`X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`)
+5. **Store** — the upstream response (status, headers, body) gets saved as the job result
+6. **Poll** — you come back whenever you want and grab the result
 
 Hop-by-hop headers get stripped per RFC 2616 because we're civilized like that.
 
@@ -73,77 +70,100 @@ services:
     ports:
       - "8080:8080"
     environment:
-      PROXQ_UPSTREAM_URL: http://your-api:3000
-      PROXQ_REDIS_ADDR: redis:6379
-      PROXQ_LISTENADDRESS: 0.0.0.0:8080
+      PROXQ_CONFIG: /etc/proxq/config.yaml
+    configs:
+      - source: proxq_config
+        target: /etc/proxq/config.yaml
     depends_on:
       - redis
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+
+configs:
+  proxq_config:
+    content: |
+      listenAddress: "0.0.0.0:8080"
+      redis:
+        addr: "redis:6379"
+      upstreams:
+        - prefix: "/"
+          url: "http://your-api:3000"
 ```
 
 That's it. Your API is now async. You're welcome.
 
 ## Configuration
 
-Everything's an env var. No YAML, no TOML, no config files to lose in production.
+Everything lives in a YAML config file. See [`config.yaml.example`](config.yaml.example) for the full reference.
 
-### The important one
+Config file path is resolved in order: `--config` flag → `PROXQ_CONFIG` env var → `config.yaml` in the current directory.
 
-| Variable             | Description                                                                                   |
-| -------------------- | --------------------------------------------------------------------------------------------- |
-| `PROXQ_UPSTREAM_URL` | Where to send the requests. **Required.** If you don't set this, proxq will tell you and die. |
+### Global settings
 
-### Proxy settings
+```yaml
+listenAddress: "0.0.0.0:8080"      # HTTP listen address
 
-| Variable                       | Default          | What it does                                                                                                                                             |
-| ------------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PROXQ_REDIS_ADDR`             | `127.0.0.1:6379` | Redis. You need one.                                                                                                                                     |
-| `PROXQ_REDIS_PASSWORD`         |                  | Redis password, if you're into that                                                                                                                      |
-| `PROXQ_REDIS_DB`               | `0`              | Redis DB number                                                                                                                                          |
-| `PROXQ_CONCURRENCY`            | `10`             | How many workers hammer upstream simultaneously                                                                                                          |
-| `PROXQ_QUEUE`                  | `default`        | asynq queue name                                                                                                                                         |
-| `PROXQ_UPSTREAM_TIMEOUT`       | `5m`             | How long to wait for upstream before giving up on life                                                                                                   |
-| `PROXQ_TASK_RETENTION`         | `1h`             | How long completed jobs stick around in Redis                                                                                                            |
-| `PROXQ_MAX_REQUEST_BODY_SIZE`  | `10485760`       | 10MB. Max body size for queued requests.                                                                                                                 |
-| `PROXQ_DIRECT_PROXY_THRESHOLD` | `10485760`       | Requests with `Content-Length` above this bypass the queue and get proxied directly to upstream. Chunked transfers always bypass. Set to `0` to disable. |
-| `PROXQ_DIRECT_PROXY_MODE`      | `proxy`          | `proxy` = reverse proxy through proxq. `redirect` = 307 redirect to upstream (upstream must be reachable by client).                                     |
-| `PROXQ_PATH_FILTER`            |                  | Comma-separated regexes matched against request path. Behavior depends on `PROXQ_PATH_FILTER_MODE`.                                                     |
-| `PROXQ_PATH_FILTER_MODE`       | `blacklist`      | `blacklist` = matching paths bypass the queue. `whitelist` = only matching paths get queued, everything else bypasses.                                    |
-| `PROXQ_JOBS_PATH`              | `/__jobs`        | Base path for the jobs API. All examples in this doc use the default — yours will differ if you change it.                                               |
+redis:
+  addr: "127.0.0.1:6379"           # Redis address
+  password: ""                      # Redis password
+  db: 0                             # Redis DB number
+
+queue: "default"                    # asynq queue name
+concurrency: 10                     # how many workers hammer upstream simultaneously
+jobsPath: "/__jobs"                 # base path for the jobs API
+taskRetention: "1h"                 # how long completed jobs stick around in Redis
+```
+
+### Upstreams
+
+Multiple upstreams with path-prefix routing. Longest prefix wins. The prefix is stripped before forwarding.
+
+```yaml
+upstreams:
+  - prefix: "/api"
+    url: "http://api-server:3000"
+    timeout: "5m"                   # per-upstream request timeout
+    maxBodySize: 10485760           # max queued body size (10MB)
+    directProxyThreshold: 10485760  # body size bypass threshold (0 = disable)
+    directProxyMode: "proxy"        # proxy or redirect (307)
+    pathFilter:
+      mode: "blacklist"             # blacklist or whitelist
+      patterns:
+        - "^/api/uploads"           # these paths bypass the queue
+
+  - prefix: "/web"
+    url: "http://web-server:8080"
+```
+
+`/api/users?page=1` → `http://api-server:3000/users?page=1` (prefix stripped, query preserved).
+
+Rules: with a single upstream, `prefix: "/"` is allowed (catch-all). With multiple upstreams, each must have its own distinct prefix — no root `"/"` and no overlapping prefixes. Requests that don't match any prefix get `502 Bad Gateway`.
 
 ### Caching
 
-Because why hit upstream twice when once was painful enough.
+```yaml
+cache:
+  mode: "none"          # none, memory, redis
+  ttl: "5m"             # how long cached responses stay fresh
+  maxEntries: 10000     # max entries for in-memory LRU
+  redisKeyPrefix: "proxq:"
+```
 
-| Variable            | Default | What it does                                                          |
-| ------------------- | ------- | --------------------------------------------------------------------- |
-| `CACHE_MODE`        | `none`  | `none` = no cache. `memory` = in-process LRU. `redis` = Redis-backed. |
-| `CACHE_TTL`         | `5m`    | How long cached responses stay fresh                                  |
-| `CACHE_MAX_ENTRIES` | `10000` | Max entries for in-memory cache before LRU kicks the oldest out       |
-
-When `CACHE_MODE=redis`, cache uses the same Redis instance as the job queue (`PROXQ_REDIS_*`). Keys are namespaced under `proxq:cache:` so they don't collide with job data.
+When `mode: redis`, cache uses the same Redis instance as the job queue. Keys are namespaced under the prefix so they don't collide with job data.
 
 Cache rules:
-
 - **Any method** gets cached. Same POST with the same body? Cache hit. Different body? Cache miss.
 - Only **2xx** responses get cached. Your 500s aren't worth remembering.
 - Cache key = `sha256(method + url + headers + body)`. Volatile headers (`X-Request-ID`, `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`) are excluded from the key so they don't bust the cache.
 - Cached responses include an `X-Cache-Status` header: `HIT` for cache hits, `MISS` for fresh upstream responses.
 
-### HTTP server
-
-| Variable              | Default          |
-| --------------------- | ---------------- |
-| `PROXQ_LISTENADDRESS` | `127.0.0.1:8080` |
-
 ## API
 
 ### Send a request (any method, any path)
 
-Anything that doesn't match `PROXQ_JOBS_PATH` (default `/__jobs`) gets intercepted and queued — unless it triggers [direct proxy bypass](#direct-proxy-bypass).
+Anything that doesn't match `jobsPath` gets intercepted and routed to an upstream — unless it triggers [direct proxy bypass](#direct-proxy-bypass).
 
 ```
 POST /api/heavy-computation HTTP/1.1
@@ -158,7 +178,7 @@ Content-Type: application/json
 ### Check job status
 
 ```
-GET {PROXQ_JOBS_PATH}/550e8400-e29b-41d4-a716-446655440000
+GET /__jobs/550e8400-e29b-41d4-a716-446655440000
 
 → 200 OK
 {
@@ -175,7 +195,7 @@ A job is **completed** when the HTTP round-trip finishes — even if upstream re
 ### Get the response
 
 ```
-GET {PROXQ_JOBS_PATH}/550e8400-e29b-41d4-a716-446655440000/content
+GET /__jobs/550e8400-e29b-41d4-a716-446655440000/content
 
 → 200 OK
 Content-Type: application/json
@@ -185,12 +205,12 @@ Content-Type: application/json
 
 Replays the upstream response exactly — status code, headers, body. As if you'd called upstream directly.
 
-Returns `404` if the job isn't done yet or doesn't exist.
+Returns `404` if the job isn't done yet or doesn't exist. When proxq itself returns 404 (not the upstream), the response includes an `X-Proxq-Source: proxq` header so you can tell the difference.
 
 ### Cancel a job
 
 ```
-DELETE {PROXQ_JOBS_PATH}/550e8400-e29b-41d4-a716-446655440000
+DELETE /__jobs/550e8400-e29b-41d4-a716-446655440000
 
 → 200 {"status": "cancelled"}
 → 404 (already gone or never existed)
@@ -200,40 +220,30 @@ DELETE {PROXQ_JOBS_PATH}/550e8400-e29b-41d4-a716-446655440000
 
 Not everything needs the queue. These requests skip it entirely:
 
-- **Path filter** (`PROXQ_PATH_FILTER` + `PROXQ_PATH_FILTER_MODE`) — in `blacklist` mode (default), matching paths bypass the queue. In `whitelist` mode, only matching paths get queued, everything else bypasses.
+- **Path filter** (per-upstream `pathFilter`) — in `blacklist` mode (default), matching paths bypass the queue. In `whitelist` mode, only matching paths get queued, everything else bypasses.
 - **Chunked transfers** (`Transfer-Encoding: chunked`) — size unknown, could be huge. Always bypassed.
-- **Large bodies** (`Content-Length` > `PROXQ_DIRECT_PROXY_THRESHOLD`) — no point buffering a 1GB ISO into Redis.
+- **Large bodies** (`Content-Length` > upstream's `directProxyThreshold`) — no point buffering a 1GB ISO into Redis.
 - **WebSocket connections** (`Connection: upgrade` + `Upgrade: websocket`) — persistent bidirectional, obviously can't queue these.
 
-Bypassed requests are either reverse-proxied through proxq (`PROXQ_DIRECT_PROXY_MODE=proxy`, default) or 307-redirected to upstream (`redirect` mode, requires upstream to be reachable by the client).
-
-Set `PROXQ_DIRECT_PROXY_THRESHOLD=0` to disable the body size check (chunked and WebSocket bypass still applies).
+Bypassed requests are either reverse-proxied through proxq (`directProxyMode: proxy`, default) or 307-redirected to upstream (`redirect` mode, requires upstream to be reachable by the client).
 
 ## Architecture
 
 ```
 docker-proxq/
-├── cmd/                    # the main() nobody reads
+├── cmd/                        # the main() nobody reads
 ├── internal/
-│   ├── app/                # wiring: asynq + HTTP server + cache
-│   ├── config/             # env vars → struct, no magic
-│   ├── proxy/              # the asynq job handlers
-│   └── testinfra/          # testcontainers helpers
-├── tests/
-│   ├── helpers_test.go     # setup, types, shared test infra
-│   ├── content_test.go     # response content type tests
-│   ├── jobs_test.go        # job lifecycle tests
-│   ├── bypass_test.go      # direct proxy bypass tests
-│   ├── cache_test.go       # caching tests
-│   ├── edge_cases_test.go  # security, concurrency, edge cases
-│   └── .fixtures/
-│       └── upstream.js     # Node.js echo server for e2e
+│   ├── app/                    # wiring: asynq + HTTP server + cache
+│   ├── config/                 # YAML config parsing
+│   ├── proxy/                  # handler, worker, job types
+│   └── testinfra/              # testcontainers helpers
+├── tests/                      # e2e tests (Docker-based)
+├── config.yaml.example         # full config reference
 ├── Dockerfile
 └── Makefile
 ```
 
 Built on:
-
 - **[aichteeteapee](https://github.com/psyb0t/aichteeteapee)** — HTTP forwarding engine (the proxy guts, header stripping, caching integration)
 - **[common-go](https://github.com/psyb0t/common-go)** — cache package (in-memory LRU + Redis implementations)
 - **[asynq](https://github.com/hibiken/asynq)** — Redis-backed task queue (the job management layer)
@@ -243,8 +253,8 @@ Built on:
 ```bash
 make dep            # vendor dependencies
 make lint           # golangci-lint with all the annoying linters enabled
-make test           # unit tests
-make test-coverage  # unit tests with coverage check
+make test           # unit + integration tests
+make test-coverage  # tests with 90% coverage check
 
 # e2e tests — spins up Redis + Node.js upstream + proxq
 # in Docker via testcontainers. No manual setup needed.

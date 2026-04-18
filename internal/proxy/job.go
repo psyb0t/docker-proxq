@@ -10,6 +10,11 @@ const TaskTypeName = "proxy:request"
 
 const DefaultQueue = "default"
 
+const (
+	HeaderNameXProxqSource = "X-Proxq-Source"
+	HeaderValueProxq       = "proxq"
+)
+
 type Status string
 
 const (

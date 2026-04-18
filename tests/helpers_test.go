@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -44,10 +45,55 @@ type env struct {
 	cleanup   func()
 }
 
+type setupOpts struct {
+	cacheMode    string
+	extraConfig  string
+	upstreamsCfg string
+}
+
+func defaultUpstreamsCfg() string {
+	return `
+upstreams:
+  - prefix: "/"
+    url: "http://upstream:3000"
+    timeout: "5m"
+`
+}
+
+func buildConfigYAML(opts setupOpts) string {
+	upstreams := opts.upstreamsCfg
+	if upstreams == "" {
+		upstreams = defaultUpstreamsCfg()
+	}
+
+	cacheMode := opts.cacheMode
+	if cacheMode == "" {
+		cacheMode = "none"
+	}
+
+	cfg := fmt.Sprintf(`
+listenAddress: "0.0.0.0:8080"
+redis:
+  addr: "redis:6379"
+queue: "default"
+concurrency: 5
+jobsPath: "/__jobs"
+taskRetention: "1h"
+cache:
+  mode: "%s"
+  ttl: "30s"
+  maxEntries: 1000
+  redisKeyPrefix: "proxq:"
+%s
+%s
+`, cacheMode, opts.extraConfig, upstreams)
+
+	return cfg
+}
+
 func setup(
 	t *testing.T,
-	cacheMode string,
-	extraEnv map[string]string,
+	opts setupOpts,
 ) env {
 	t.Helper()
 
@@ -105,19 +151,8 @@ func setup(
 		"http://%s:%s", host, port.Port(),
 	)
 
-	envVars := map[string]string{
-		"PROXQ_UPSTREAM_URL":  "http://upstream:3000",
-		"PROXQ_REDIS_ADDR":   "redis:6379",
-		"PROXQ_CONCURRENCY":  "5",
-		"PROXQ_LISTENADDRESS": "0.0.0.0:8080",
-		"CACHE_MODE":          cacheMode,
-		"CACHE_TTL":           "30s",
-		"CACHE_MAX_ENTRIES":   "1000",
-	}
-
-	for k, v := range extraEnv {
-		envVars[k] = v
-	}
+	configContent := buildConfigYAML(opts)
+	configPath := writeConfigFile(t, configContent)
 
 	proxq, err := testcontainers.GenericContainer(
 		ctx,
@@ -126,7 +161,16 @@ func setup(
 				Image:        proxqImage,
 				ExposedPorts: []string{"8080/tcp"},
 				Networks:     []string{net.Name},
-				Env:          envVars,
+				Env: map[string]string{
+					"PROXQ_CONFIG": "/app/config.yaml",
+				},
+				Files: []testcontainers.ContainerFile{
+					{
+						HostFilePath:      configPath,
+						ContainerFilePath: "/app/config.yaml",
+						FileMode:          0o644,
+					},
+				},
 				WaitingFor: wait.ForHTTP("/").
 					WithPort("8080/tcp").
 					WithStatusCodeMatcher(
@@ -165,6 +209,21 @@ func setup(
 			_ = net.Remove(ctx)
 		},
 	}
+}
+
+func writeConfigFile(
+	t *testing.T, content string,
+) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	require.NoError(t, os.WriteFile(
+		path, []byte(content), 0o600,
+	))
+
+	return path
 }
 
 func submitJob(
