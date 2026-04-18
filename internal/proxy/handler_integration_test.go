@@ -266,6 +266,71 @@ func TestHandler_ServeHTTP_MultiUpstream(
 	}
 }
 
+func TestHandler_CacheKeyExcludeHeaders(
+	t *testing.T,
+) {
+	redis, cleanup := setupRedis(t)
+	defer cleanup()
+
+	client := asynq.NewClient(redis.RedisOpt())
+
+	defer func() { _ = client.Close() }()
+
+	inspector := asynq.NewInspector(redis.RedisOpt())
+
+	defer func() { _ = inspector.Close() }()
+
+	queue := "cache-excl"
+	excludeHeaders := []string{
+		"Authorization", "X-Trace-ID",
+	}
+
+	h := NewHandler(client, HandlerConfig{
+		Queue:         queue,
+		TaskRetention: 10 * time.Minute,
+		Upstreams: []UpstreamConfig{
+			{
+				Prefix:                 "/",
+				URL:                    "http://backend:8080",
+				MaxBodySize:            config.DefaultMaxBodySize,
+				CacheKeyExcludeHeaders: excludeHeaders,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/test", nil,
+	)
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp acceptedResponse
+
+	require.NoError(t, json.Unmarshal(
+		rec.Body.Bytes(), &resp,
+	))
+
+	info, err := inspector.GetTaskInfo(
+		queue, resp.JobID,
+	)
+	require.NoError(t, err)
+
+	var envelope struct {
+		CacheKeyExcludeHeaders []string `json:"cacheKeyExcludeHeaders"` //nolint:lll
+	}
+
+	require.NoError(t, json.Unmarshal(
+		info.Payload, &envelope,
+	))
+	assert.Equal(
+		t, excludeHeaders,
+		envelope.CacheKeyExcludeHeaders,
+	)
+}
+
 func TestHandler_ServeHTTP_NoUpstreamMatch(
 	t *testing.T,
 ) {

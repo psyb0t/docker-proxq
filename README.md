@@ -140,6 +140,7 @@ Multiple upstreams with path-prefix routing. Longest prefix wins. The prefix is 
 | `maxBodySize` | int | `10485760` | Max request body to queue (bytes). 10 MB default. |
 | `directProxyThreshold` | int | `10485760` | Body size above which requests bypass the queue. `0` disables. |
 | `directProxyMode` | string | `proxy` | How bypassed requests reach upstream: `proxy` or `redirect` (307). |
+| `cacheKeyExcludeHeaders` | list | `[]` | Headers to exclude from cache key. Empty = defaults (see [Caching](#caching)). |
 | `pathFilter` | object | | See [Path filter](#path-filter). |
 
 ```yaml
@@ -244,8 +245,22 @@ When `mode: redis`, cache uses the same Redis instance as the job queue.
 Cache rules:
 - **Any method** gets cached. Same POST with the same body? Cache hit. Different body? Cache miss.
 - Only **2xx** responses get cached. Your 500s aren't worth remembering.
-- Cache key = `sha256(method + url + headers + body)`. Volatile headers (`X-Request-ID`, `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`) are excluded from the key so they don't bust the cache.
+- Cache key = `sha256(method + url + headers + body)`. Volatile headers are excluded from the key so they don't bust the cache.
 - Cached responses include `X-Cache-Status: HIT`. Fresh upstream responses include `X-Cache-Status: MISS`.
+
+By default, these headers are excluded from cache keys: `X-Request-ID`, `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`. Override per upstream with `cacheKeyExcludeHeaders`:
+
+```yaml
+upstreams:
+  - prefix: "/api"
+    url: "http://backend:3000"
+    cacheKeyExcludeHeaders:
+      - "X-Request-ID"
+      - "Authorization"
+      - "X-Trace-ID"
+```
+
+When `cacheKeyExcludeHeaders` is set, it **replaces** the defaults entirely — only the headers you list are excluded.
 
 ## API
 

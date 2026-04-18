@@ -33,6 +33,7 @@ upstreams:
     maxBodySize: 10485760
     directProxyThreshold: 10485760
     directProxyMode: "proxy"   # proxy or redirect
+    cacheKeyExcludeHeaders: []    # headers to exclude from cache key (empty = defaults)
     pathFilter:
       mode: "blacklist"        # blacklist or whitelist
       patterns: []

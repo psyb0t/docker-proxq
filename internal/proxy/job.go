@@ -47,8 +47,9 @@ func StatusFromTaskState(s asynq.TaskState) Status {
 }
 
 type taskEnvelope struct {
-	Request    prawxxey.RequestPayload `json:"request"`
-	RetryDelay time.Duration           `json:"retryDelay,omitempty"`
+	Request                prawxxey.RequestPayload `json:"request"`
+	RetryDelay             time.Duration           `json:"retryDelay,omitempty"`
+	CacheKeyExcludeHeaders []string                `json:"cacheKeyExcludeHeaders,omitempty"` //nolint:lll
 }
 
 func RetryDelayFunc(

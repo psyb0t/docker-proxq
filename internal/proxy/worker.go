@@ -10,13 +10,14 @@ import (
 	"github.com/psyb0t/aichteeteapee"
 	"github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
 	"github.com/psyb0t/common-go/cache"
+	"github.com/psyb0t/common-go/slogging"
 	"github.com/psyb0t/ctxerrors"
 )
 
 const defaultUpstreamTimeout = 5 * time.Minute
 
 //nolint:gochecknoglobals
-var cacheKeyExcludeHeaders = map[string]struct{}{
+var defaultCacheKeyExcludeHeaders = map[string]struct{}{
 	aichteeteapee.HeaderNameXRequestID:      {},
 	aichteeteapee.HeaderNameXForwardedFor:   {},
 	aichteeteapee.HeaderNameXRealIP:         {},
@@ -44,9 +45,8 @@ func NewWorker(cfg WorkerConfig) *Worker {
 			HTTPClient: &http.Client{
 				Timeout: timeout,
 			},
-			Cache:                  cfg.Cache,
-			CacheTTL:               cfg.CacheTTL,
-			CacheKeyExcludeHeaders: cacheKeyExcludeHeaders,
+			Cache:    cfg.Cache,
+			CacheTTL: cfg.CacheTTL,
 		},
 	}
 }
@@ -55,6 +55,8 @@ func (w *Worker) ProcessTask(
 	ctx context.Context,
 	t *asynq.Task,
 ) error {
+	logger := slogging.GetLogger(ctx)
+
 	var envelope taskEnvelope
 	if err := json.Unmarshal(
 		t.Payload(), &envelope,
@@ -64,14 +66,31 @@ func (w *Worker) ProcessTask(
 		)
 	}
 
+	logger.Debug("processing task",
+		"task_id", t.Type(),
+		"method", envelope.Request.Method,
+		"url", envelope.Request.URL,
+	)
+
+	fwdCfg := w.forwardCfg
+	fwdCfg.CacheKeyExcludeHeaders = buildExcludeHeaders(
+		envelope.CacheKeyExcludeHeaders,
+	)
+
 	result, err := prawxxey.ForwardRequest(
-		ctx, w.forwardCfg, &envelope.Request,
+		ctx, fwdCfg, &envelope.Request,
 	)
 	if err != nil {
 		return ctxerrors.Wrap(
 			err, "forward request",
 		)
 	}
+
+	logger.Debug("task completed",
+		"method", envelope.Request.Method,
+		"url", envelope.Request.URL,
+		"status", result.StatusCode,
+	)
 
 	resultData, err := json.Marshal(result)
 	if err != nil {
@@ -89,4 +108,20 @@ func (w *Worker) ProcessTask(
 	}
 
 	return nil
+}
+
+func buildExcludeHeaders(
+	headers []string,
+) map[string]struct{} {
+	if len(headers) == 0 {
+		return defaultCacheKeyExcludeHeaders
+	}
+
+	m := make(map[string]struct{}, len(headers))
+
+	for _, h := range headers {
+		m[h] = struct{}{}
+	}
+
+	return m
 }

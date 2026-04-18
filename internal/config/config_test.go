@@ -72,6 +72,7 @@ upstreams:
 	assert.Equal(
 		t, PathFilterModeBlacklist, u.PathFilter.Mode,
 	)
+	assert.Empty(t, u.CacheKeyExcludeHeaders)
 	assert.Empty(t, u.PathFilter.Patterns)
 	assert.Empty(t, u.CompiledPatterns)
 }
@@ -101,6 +102,9 @@ upstreams:
     maxBodySize: 1024
     directProxyThreshold: 2048
     directProxyMode: "redirect"
+    cacheKeyExcludeHeaders:
+      - "Authorization"
+      - "X-Trace-ID"
     pathFilter:
       mode: "whitelist"
       patterns:
@@ -149,6 +153,15 @@ upstreams:
 	)
 	assert.Equal(
 		t, DirectProxyModeRedirect, api.DirectProxyMode,
+	)
+	require.Len(t, api.CacheKeyExcludeHeaders, 2)
+	assert.Equal(
+		t, "Authorization",
+		api.CacheKeyExcludeHeaders[0],
+	)
+	assert.Equal(
+		t, "X-Trace-ID",
+		api.CacheKeyExcludeHeaders[1],
 	)
 	assert.Equal(
 		t, PathFilterModeWhitelist, api.PathFilter.Mode,

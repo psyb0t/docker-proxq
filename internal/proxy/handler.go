@@ -22,30 +22,32 @@ import (
 const defaultTaskRetention = 1 * time.Hour
 
 type UpstreamConfig struct {
-	Prefix               string
-	URL                  string
-	Timeout              time.Duration
-	MaxRetries           int
-	RetryDelay           time.Duration
-	MaxBodySize          int64
-	DirectProxyThreshold int64
-	DirectProxyMode      string
-	PathFilter           []*regexp.Regexp
-	PathFilterMode       string
+	Prefix                 string
+	URL                    string
+	Timeout                time.Duration
+	MaxRetries             int
+	RetryDelay             time.Duration
+	MaxBodySize            int64
+	DirectProxyThreshold   int64
+	DirectProxyMode        string
+	CacheKeyExcludeHeaders []string
+	PathFilter             []*regexp.Regexp
+	PathFilterMode         string
 }
 
 type upstream struct {
-	prefix               string
-	url                  string
-	timeout              time.Duration
-	maxRetries           int
-	retryDelay           time.Duration
-	maxBodySize          int64
-	directProxyThreshold int64
-	directProxyMode      string
-	pathFilter           []*regexp.Regexp
-	pathFilterMode       string
-	reverseProxy         *httputil.ReverseProxy
+	prefix                 string
+	url                    string
+	timeout                time.Duration
+	maxRetries             int
+	retryDelay             time.Duration
+	maxBodySize            int64
+	directProxyThreshold   int64
+	directProxyMode        string
+	cacheKeyExcludeHeaders []string
+	pathFilter             []*regexp.Regexp
+	pathFilterMode         string
+	reverseProxy           *httputil.ReverseProxy
 }
 
 type HandlerConfig struct {
@@ -81,17 +83,18 @@ func NewHandler(
 
 	for _, uc := range cfg.Upstreams {
 		upstreams = append(upstreams, upstream{
-			prefix:               uc.Prefix,
-			url:                  strings.TrimRight(uc.URL, "/"),
-			timeout:              uc.Timeout,
-			maxRetries:           uc.MaxRetries,
-			retryDelay:           uc.RetryDelay,
-			maxBodySize:          uc.MaxBodySize,
-			directProxyThreshold: uc.DirectProxyThreshold,
-			directProxyMode:      uc.DirectProxyMode,
-			pathFilter:           uc.PathFilter,
-			pathFilterMode:       uc.PathFilterMode,
-			reverseProxy:         buildReverseProxy(uc.URL),
+			prefix:                 uc.Prefix,
+			url:                    strings.TrimRight(uc.URL, "/"),
+			timeout:                uc.Timeout,
+			maxRetries:             uc.MaxRetries,
+			retryDelay:             uc.RetryDelay,
+			maxBodySize:            uc.MaxBodySize,
+			directProxyThreshold:   uc.DirectProxyThreshold,
+			directProxyMode:        uc.DirectProxyMode,
+			cacheKeyExcludeHeaders: uc.CacheKeyExcludeHeaders,
+			pathFilter:             uc.PathFilter,
+			pathFilterMode:         uc.PathFilterMode,
+			reverseProxy:           buildReverseProxy(uc.URL),
 		})
 	}
 
@@ -146,6 +149,12 @@ func (h *Handler) ServeHTTP(
 ) {
 	u, strippedURI := h.resolveUpstream(r)
 	if u == nil {
+		logger := slogging.GetLogger(r.Context())
+		logger.Warn(
+			"no upstream match",
+			"path", r.URL.Path,
+		)
+
 		setProxqSourceHeader(w)
 		proxylib.WriteError(
 			w, http.StatusBadGateway,
@@ -362,17 +371,7 @@ func (h *Handler) enqueueRequest(
 		return
 	}
 
-	envelope := taskEnvelope{
-		Request: proxylib.RequestPayload{
-			Method:   r.Method,
-			URL:      u.url + strippedURI,
-			Headers:  r.Header,
-			Body:     body,
-			ClientIP: aichteeteapee.GetClientIP(r),
-			Proto:    proxylib.RequestScheme(r),
-		},
-		RetryDelay: u.retryDelay,
-	}
+	envelope := buildEnvelope(r, u, strippedURI, body)
 
 	taskID, err := h.enqueue(
 		r, envelope, u.timeout, u.maxRetries,
@@ -390,6 +389,13 @@ func (h *Handler) enqueueRequest(
 		return
 	}
 
+	logger.Debug("request enqueued",
+		"job_id", taskID,
+		"upstream", u.prefix,
+		"method", r.Method,
+		"url", u.url+strippedURI,
+	)
+
 	setProxqSourceHeader(w)
 
 	aichteeteapee.WriteJSON(
@@ -397,6 +403,26 @@ func (h *Handler) enqueueRequest(
 		http.StatusAccepted,
 		acceptedResponse{JobID: taskID},
 	)
+}
+
+func buildEnvelope(
+	r *http.Request,
+	u *upstream,
+	strippedURI string,
+	body []byte,
+) taskEnvelope {
+	return taskEnvelope{
+		Request: proxylib.RequestPayload{
+			Method:   r.Method,
+			URL:      u.url + strippedURI,
+			Headers:  r.Header,
+			Body:     body,
+			ClientIP: aichteeteapee.GetClientIP(r),
+			Proto:    proxylib.RequestScheme(r),
+		},
+		RetryDelay:             u.retryDelay,
+		CacheKeyExcludeHeaders: u.cacheKeyExcludeHeaders,
+	}
 }
 
 func (h *Handler) enqueue(

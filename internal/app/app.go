@@ -152,16 +152,17 @@ func buildUpstreamConfigs(
 		upstreams = append(
 			upstreams,
 			proxqproxy.UpstreamConfig{
-				Prefix:               u.Prefix,
-				URL:                  u.URL,
-				Timeout:              u.Timeout.Std(),
-				MaxRetries:           u.MaxRetries,
-				RetryDelay:           u.RetryDelay.Std(),
-				MaxBodySize:          u.MaxBodySize,
-				DirectProxyThreshold: u.DirectProxyThreshold,
-				DirectProxyMode:      u.DirectProxyMode,
-				PathFilter:           u.CompiledPatterns,
-				PathFilterMode:       u.PathFilter.Mode,
+				Prefix:                 u.Prefix,
+				URL:                    u.URL,
+				Timeout:                u.Timeout.Std(),
+				MaxRetries:             u.MaxRetries,
+				RetryDelay:             u.RetryDelay.Std(),
+				MaxBodySize:            u.MaxBodySize,
+				DirectProxyThreshold:   u.DirectProxyThreshold,
+				DirectProxyMode:        u.DirectProxyMode,
+				CacheKeyExcludeHeaders: u.CacheKeyExcludeHeaders,
+				PathFilter:             u.CompiledPatterns,
+				PathFilterMode:         u.PathFilter.Mode,
 			},
 		)
 	}
