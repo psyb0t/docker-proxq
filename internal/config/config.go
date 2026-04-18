@@ -16,8 +16,10 @@ type Config struct {
 
 	MaxBodySize          int64  `env:"PROXQ_MAX_REQUEST_BODY_SIZE"  default:"10485760"` //nolint:lll
 	DirectProxyThreshold int64  `env:"PROXQ_DIRECT_PROXY_THRESHOLD" default:"10485760"` //nolint:lll
-	DirectProxyPaths     string `env:"PROXQ_DIRECT_PROXY_PATHS"`
-	DirectProxyMode      string `env:"PROXQ_DIRECT_PROXY_MODE"      default:"proxy"` //nolint:lll
+	DirectProxyMode      string `env:"PROXQ_DIRECT_PROXY_MODE"      default:"proxy"`    //nolint:lll
+
+	PathFilter     string `env:"PROXQ_PATH_FILTER"`
+	PathFilterMode string `env:"PROXQ_PATH_FILTER_MODE" default:"blacklist"` //nolint:lll
 
 	UpstreamTimeout time.Duration `env:"PROXQ_UPSTREAM_TIMEOUT" default:"5m"`
 	TaskRetention   time.Duration `env:"PROXQ_TASK_RETENTION"   default:"1h"`

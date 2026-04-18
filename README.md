@@ -109,8 +109,9 @@ Everything's an env var. No YAML, no TOML, no config files to lose in production
 | `PROXQ_TASK_RETENTION`         | `1h`             | How long completed jobs stick around in Redis                                                                                                            |
 | `PROXQ_MAX_REQUEST_BODY_SIZE`  | `10485760`       | 10MB. Max body size for queued requests.                                                                                                                 |
 | `PROXQ_DIRECT_PROXY_THRESHOLD` | `10485760`       | Requests with `Content-Length` above this bypass the queue and get proxied directly to upstream. Chunked transfers always bypass. Set to `0` to disable. |
-| `PROXQ_DIRECT_PROXY_PATHS`     |                  | Comma-separated regexes. Requests matching any pattern bypass the queue. Example: `^/uploads,^/ws,^/stream`                                              |
 | `PROXQ_DIRECT_PROXY_MODE`      | `proxy`          | `proxy` = reverse proxy through proxq. `redirect` = 307 redirect to upstream (upstream must be reachable by client).                                     |
+| `PROXQ_PATH_FILTER`            |                  | Comma-separated regexes matched against request path. Behavior depends on `PROXQ_PATH_FILTER_MODE`.                                                     |
+| `PROXQ_PATH_FILTER_MODE`       | `blacklist`      | `blacklist` = matching paths bypass the queue. `whitelist` = only matching paths get queued, everything else bypasses.                                    |
 | `PROXQ_JOBS_PATH`              | `/__jobs`        | Base path for the jobs API. All examples in this doc use the default — yours will differ if you change it.                                               |
 
 ### Caching
@@ -197,14 +198,16 @@ DELETE {PROXQ_JOBS_PATH}/550e8400-e29b-41d4-a716-446655440000
 
 ## Direct proxy bypass
 
-Not everything needs the queue. These requests skip it entirely and get proxied straight to upstream — single transfer, no buffering, synchronous response:
+Not everything needs the queue. These requests skip it entirely:
 
-- **Path rules** (`PROXQ_DIRECT_PROXY_PATHS`) — comma-separated regexes matched against the request path. Example: `^/uploads,^/ws,^/stream`
+- **Path filter** (`PROXQ_PATH_FILTER` + `PROXQ_PATH_FILTER_MODE`) — in `blacklist` mode (default), matching paths bypass the queue. In `whitelist` mode, only matching paths get queued, everything else bypasses.
 - **Chunked transfers** (`Transfer-Encoding: chunked`) — size unknown, could be huge. Always bypassed.
 - **Large bodies** (`Content-Length` > `PROXQ_DIRECT_PROXY_THRESHOLD`) — no point buffering a 1GB ISO into Redis.
 - **WebSocket connections** (`Connection: upgrade` + `Upgrade: websocket`) — persistent bidirectional, obviously can't queue these.
 
-The client gets the upstream response directly instead of a job ID. Set `PROXQ_DIRECT_PROXY_THRESHOLD=0` to disable the body size check (chunked and WebSocket bypass still applies).
+Bypassed requests are either reverse-proxied through proxq (`PROXQ_DIRECT_PROXY_MODE=proxy`, default) or 307-redirected to upstream (`redirect` mode, requires upstream to be reachable by the client).
+
+Set `PROXQ_DIRECT_PROXY_THRESHOLD=0` to disable the body size check (chunked and WebSocket bypass still applies).
 
 ## Architecture
 

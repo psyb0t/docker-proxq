@@ -33,7 +33,7 @@ func TestDirectProxyBypass(t *testing.T) {
 		{
 			name: "path regex match",
 			extraEnv: map[string]string{
-				"PROXQ_DIRECT_PROXY_PATHS": "^/direct",
+				"PROXQ_PATH_FILTER": "^/direct",
 			},
 			method: http.MethodGet,
 			path:   "/direct/something",
@@ -41,7 +41,7 @@ func TestDirectProxyBypass(t *testing.T) {
 		{
 			name: "multiple path patterns",
 			extraEnv: map[string]string{
-				"PROXQ_DIRECT_PROXY_PATHS": "^/uploads,^/stream",
+				"PROXQ_PATH_FILTER": "^/uploads,^/stream",
 			},
 			method: http.MethodGet,
 			path:   "/stream/data",
@@ -92,7 +92,7 @@ func TestDirectProxyBypass(t *testing.T) {
 
 func TestQueuedNotBypassed(t *testing.T) {
 	e := setup(t, "none", map[string]string{
-		"PROXQ_DIRECT_PROXY_PATHS":     "^/direct",
+		"PROXQ_PATH_FILTER":     "^/direct",
 		"PROXQ_DIRECT_PROXY_THRESHOLD": "1000000",
 	})
 	defer e.cleanup()

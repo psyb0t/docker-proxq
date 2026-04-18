@@ -8,3 +8,4 @@ __debug_*
 .vscode
 .idea
 .research_files
+git-update.sh

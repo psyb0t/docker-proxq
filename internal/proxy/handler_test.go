@@ -137,7 +137,7 @@ func TestIsChunkedTransfer(t *testing.T) {
 	}
 }
 
-func TestShouldDirectProxy(t *testing.T) {
+func TestShouldBypassQueue(t *testing.T) {
 	tests := []struct {
 		name             string
 		threshold        int64
@@ -198,60 +198,75 @@ func TestShouldDirectProxy(t *testing.T) {
 
 			assert.Equal(
 				t, tt.expected,
-				h.shouldDirectProxy(req),
+				h.shouldBypassQueue(req),
 			)
 		})
 	}
 }
 
-func TestMatchesDirectProxyPath(t *testing.T) {
+func TestPathFilterBypasses(t *testing.T) {
 	tests := []struct {
-		name     string
-		patterns []string
-		path     string
-		expected bool
+		name       string
+		patterns   []string
+		filterMode string
+		path       string
+		expected   bool
 	}{
 		{
-			name:     "matches upload path",
-			patterns: []string{`^/uploads`},
-			path:     "/uploads/image.png",
-			expected: true,
+			name:       "blacklist match bypasses",
+			patterns:   []string{`^/uploads`},
+			filterMode: PathFilterModeBlacklist,
+			path:       "/uploads/image.png",
+			expected:   true,
 		},
 		{
-			name:     "matches ws path",
-			patterns: []string{`^/ws`},
-			path:     "/ws/connect",
-			expected: true,
+			name:       "blacklist no match queues",
+			patterns:   []string{`^/uploads`},
+			filterMode: PathFilterModeBlacklist,
+			path:       "/api/data",
+			expected:   false,
 		},
 		{
-			name:     "no match",
-			patterns: []string{`^/uploads`, `^/ws`},
-			path:     "/api/data",
-			expected: false,
+			name:       "whitelist match queues",
+			patterns:   []string{`^/api`},
+			filterMode: PathFilterModeWhitelist,
+			path:       "/api/data",
+			expected:   false,
 		},
 		{
-			name:     "empty patterns",
-			patterns: nil,
-			path:     "/anything",
-			expected: false,
+			name:       "whitelist no match bypasses",
+			patterns:   []string{`^/api`},
+			filterMode: PathFilterModeWhitelist,
+			path:       "/uploads/big.iso",
+			expected:   true,
 		},
 		{
-			name:     "exact match",
-			patterns: []string{`^/stream$`},
-			path:     "/stream",
-			expected: true,
+			name:       "empty patterns never bypasses",
+			patterns:   nil,
+			filterMode: PathFilterModeBlacklist,
+			path:       "/anything",
+			expected:   false,
 		},
 		{
-			name:     "exact no match on subpath",
-			patterns: []string{`^/stream$`},
-			path:     "/stream/data",
-			expected: false,
+			name:       "empty whitelist never bypasses",
+			patterns:   nil,
+			filterMode: PathFilterModeWhitelist,
+			path:       "/anything",
+			expected:   false,
 		},
 		{
-			name:     "matches second pattern",
-			patterns: []string{`^/nope`, `^/yes`},
-			path:     "/yes/please",
-			expected: true,
+			name:       "blacklist multiple patterns",
+			patterns:   []string{`^/uploads`, `^/ws`},
+			filterMode: PathFilterModeBlacklist,
+			path:       "/ws/connect",
+			expected:   true,
+		},
+		{
+			name:       "whitelist multiple only queues match",
+			patterns:   []string{`^/api`, `^/rpc`},
+			filterMode: PathFilterModeWhitelist,
+			path:       "/static/file.js",
+			expected:   true,
 		},
 	}
 
@@ -266,29 +281,31 @@ func TestMatchesDirectProxyPath(t *testing.T) {
 			}
 
 			h := &Handler{
-				directProxyPaths: compiled,
+				pathFilter:     compiled,
+				pathFilterMode: tt.filterMode,
 			}
 
 			assert.Equal(
 				t, tt.expected,
-				h.matchesDirectProxyPath(tt.path),
+				h.pathFilterBypasses(tt.path),
 			)
 		})
 	}
 }
 
-func TestShouldDirectProxy_PathMatch(t *testing.T) {
+func TestShouldBypassQueue_PathFilter(t *testing.T) {
 	h := &Handler{
-		directProxyPaths: []*regexp.Regexp{
+		pathFilter: []*regexp.Regexp{
 			regexp.MustCompile(`^/uploads`),
 		},
+		pathFilterMode: PathFilterModeBlacklist,
 	}
 
 	req := httptest.NewRequest(
 		http.MethodPost, "/uploads/big.iso", nil,
 	)
 
-	assert.True(t, h.shouldDirectProxy(req))
+	assert.True(t, h.shouldBypassQueue(req))
 }
 
 func TestNewHandler(t *testing.T) {

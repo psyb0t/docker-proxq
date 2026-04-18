@@ -34,12 +34,12 @@ func Run() error {
 		os.Exit(1)
 	}
 
-	directProxyPaths, err := parseDirectProxyPaths(
-		cfg.DirectProxyPaths,
+	pathFilter, err := parsePathFilter(
+		cfg.PathFilter,
 	)
 	if err != nil {
 		return ctxerrors.Wrap(
-			err, "parse direct proxy paths",
+			err, "parse path filter",
 		)
 	}
 
@@ -72,7 +72,7 @@ func Run() error {
 
 	err = startHTTPServer(
 		ctx, cfg, client, inspector,
-		directProxyPaths,
+		pathFilter,
 	)
 
 	wg.Wait()
@@ -172,7 +172,7 @@ func buildRouter(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
-	directProxyPaths []*regexp.Regexp,
+	pathFilter []*regexp.Regexp,
 ) *serbewr.Router {
 	proxyHandler := proxqproxy.NewHandler(
 		client,
@@ -180,8 +180,9 @@ func buildRouter(
 			UpstreamURL:          cfg.UpstreamURL,
 			MaxRequestBodySize:   cfg.MaxBodySize,
 			DirectProxyThreshold: cfg.DirectProxyThreshold,
-			DirectProxyPaths:     directProxyPaths,
 			DirectProxyMode:      cfg.DirectProxyMode,
+			PathFilter:           pathFilter,
+			PathFilterMode:       cfg.PathFilterMode,
 			Queue:                cfg.Queue,
 			TaskRetention:        cfg.TaskRetention,
 		},
@@ -245,7 +246,7 @@ func startHTTPServer(
 	cfg config.Config,
 	client *asynq.Client,
 	inspector *asynq.Inspector,
-	directProxyPaths []*regexp.Regexp,
+	pathFilter []*regexp.Regexp,
 ) error {
 	srv, err := serbewr.NewWithConfig(serbewr.Config{
 		ListenAddress: cfg.ListenAddress,
@@ -255,7 +256,7 @@ func startHTTPServer(
 	}
 
 	router := buildRouter(
-		cfg, client, inspector, directProxyPaths,
+		cfg, client, inspector, pathFilter,
 	)
 
 	if err = srv.Start(ctx, router); err != nil {
@@ -265,7 +266,7 @@ func startHTTPServer(
 	return nil
 }
 
-func parseDirectProxyPaths(
+func parsePathFilter(
 	raw string,
 ) ([]*regexp.Regexp, error) {
 	if raw == "" {

@@ -30,12 +30,20 @@ const (
 	DirectProxyModeRedirect DirectProxyMode = "redirect"
 )
 
+type PathFilterMode = string
+
+const (
+	PathFilterModeBlacklist PathFilterMode = "blacklist"
+	PathFilterModeWhitelist PathFilterMode = "whitelist"
+)
+
 type HandlerConfig struct {
 	UpstreamURL          string
 	MaxRequestBodySize   int64
 	DirectProxyThreshold int64
-	DirectProxyPaths     []*regexp.Regexp
 	DirectProxyMode      string
+	PathFilter           []*regexp.Regexp
+	PathFilterMode       string
 	Queue                string
 	TaskRetention        time.Duration
 }
@@ -47,8 +55,9 @@ type Handler struct {
 	taskRetention        time.Duration
 	maxRequestBodySize   int64
 	directProxyThreshold int64
-	directProxyPaths     []*regexp.Regexp
 	directProxyMode      string
+	pathFilter           []*regexp.Regexp
+	pathFilterMode       string
 	reverseProxy         *httputil.ReverseProxy
 }
 
@@ -76,6 +85,11 @@ func NewHandler(
 		proxyMode = DirectProxyModeProxy
 	}
 
+	filterMode := cfg.PathFilterMode
+	if filterMode == "" {
+		filterMode = PathFilterModeBlacklist
+	}
+
 	h := &Handler{
 		client:               client,
 		upstreamURL:          cfg.UpstreamURL,
@@ -83,8 +97,9 @@ func NewHandler(
 		taskRetention:        retention,
 		maxRequestBodySize:   maxBody,
 		directProxyThreshold: cfg.DirectProxyThreshold,
-		directProxyPaths:     cfg.DirectProxyPaths,
 		directProxyMode:      proxyMode,
+		pathFilter:           cfg.PathFilter,
+		pathFilterMode:       filterMode,
 	}
 
 	h.reverseProxy = buildReverseProxy(cfg.UpstreamURL)
@@ -114,7 +129,7 @@ func buildReverseProxy(
 				r.Context(),
 			)
 			logger.Error(
-				"websocket proxy error",
+				"reverse proxy error",
 				"error", err,
 			)
 			proxylib.WriteError(
@@ -138,7 +153,7 @@ func (h *Handler) ServeHTTP(
 		return
 	}
 
-	if h.shouldDirectProxy(r) {
+	if h.shouldBypassQueue(r) {
 		h.directProxy(w, r)
 
 		return
@@ -157,7 +172,7 @@ func isChunkedTransfer(r *http.Request) bool {
 	return false
 }
 
-func (h *Handler) shouldDirectProxy(
+func (h *Handler) shouldBypassQueue(
 	r *http.Request,
 ) bool {
 	if isChunkedTransfer(r) {
@@ -169,19 +184,36 @@ func (h *Handler) shouldDirectProxy(
 		return true
 	}
 
-	return h.matchesDirectProxyPath(r.URL.Path)
+	return h.pathFilterBypasses(r.URL.Path)
 }
 
-func (h *Handler) matchesDirectProxyPath(
+func (h *Handler) matchesPathFilter(
 	path string,
 ) bool {
-	for _, re := range h.directProxyPaths {
+	for _, re := range h.pathFilter {
 		if re.MatchString(path) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func (h *Handler) pathFilterBypasses(
+	path string,
+) bool {
+	if len(h.pathFilter) == 0 {
+		return false
+	}
+
+	matches := h.matchesPathFilter(path)
+
+	switch h.pathFilterMode {
+	case PathFilterModeWhitelist:
+		return !matches
+	default:
+		return matches
+	}
 }
 
 func (h *Handler) directProxy(
