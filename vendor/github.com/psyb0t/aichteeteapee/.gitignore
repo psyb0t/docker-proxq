@@ -7,3 +7,4 @@ http/server/.test/uploads
 *.out
 CLAUDE.md
 .test*
+.research_files

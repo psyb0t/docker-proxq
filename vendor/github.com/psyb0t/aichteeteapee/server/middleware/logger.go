@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/psyb0t/aichteeteapee"
+	"github.com/psyb0t/common-go/slogging"
 )
 
-// LoggerConfig holds configuration for logger middleware.
 type LoggerConfig struct {
-	Logger         *slog.Logger
 	LogLevel       slog.Level
 	Message        string
 	SkipPaths      map[string]bool
@@ -24,28 +23,18 @@ type LoggerConfig struct {
 
 type LoggerOption func(*LoggerConfig)
 
-// WithLogger sets the logger instance.
-func WithLogger(logger *slog.Logger) LoggerOption {
-	return func(c *LoggerConfig) {
-		c.Logger = logger
-	}
-}
-
-// WithLogLevel sets the log level for requests.
 func WithLogLevel(level slog.Level) LoggerOption {
 	return func(c *LoggerConfig) {
 		c.LogLevel = level
 	}
 }
 
-// WithLogMessage sets the log message.
 func WithLogMessage(message string) LoggerOption {
 	return func(c *LoggerConfig) {
 		c.Message = message
 	}
 }
 
-// WithSkipPaths sets paths to skip logging.
 func WithSkipPaths(paths ...string) LoggerOption {
 	return func(c *LoggerConfig) {
 		if c.SkipPaths == nil {
@@ -58,8 +47,9 @@ func WithSkipPaths(paths ...string) LoggerOption {
 	}
 }
 
-// WithExtraFields adds extra fields to all log entries.
-func WithExtraFields(fields map[string]any) LoggerOption {
+func WithExtraFields(
+	fields map[string]any,
+) LoggerOption {
 	return func(c *LoggerConfig) {
 		if c.ExtraFields == nil {
 			c.ExtraFields = make(map[string]any)
@@ -69,28 +59,24 @@ func WithExtraFields(fields map[string]any) LoggerOption {
 	}
 }
 
-// WithIncludeQuery enables/disables query parameter logging.
 func WithIncludeQuery(include bool) LoggerOption {
 	return func(c *LoggerConfig) {
 		c.IncludeQuery = include
 	}
 }
 
-// WithIncludeHeaders enables header logging.
-func WithIncludeHeaders(headers ...string) LoggerOption {
+func WithIncludeHeaders(
+	headers ...string,
+) LoggerOption {
 	return func(c *LoggerConfig) {
 		c.IncludeHeaders = len(headers) > 0
 		c.HeaderFields = headers
 	}
 }
 
-// LoggerMiddleware logs HTTP requests with structured logging and configurable
-// options
-//
-//nolint:funlen // Long function due to comprehensive logging configuration
+//nolint:funlen
 func Logger(opts ...LoggerOption) Middleware {
 	config := &LoggerConfig{
-		Logger:         slog.Default(),
 		LogLevel:       slog.LevelInfo,
 		Message:        "HTTP request",
 		SkipPaths:      make(map[string]bool),
@@ -105,70 +91,79 @@ func Logger(opts ...LoggerOption) Middleware {
 	}
 
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip logging for specified paths
-			if config.SkipPaths[r.URL.Path] {
-				next.ServeHTTP(w, r)
+		return http.HandlerFunc(
+			func(
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				if config.SkipPaths[r.URL.Path] {
+					next.ServeHTTP(w, r)
 
-				return
-			}
+					return
+				}
 
-			ctx := r.Context()
-			start := time.Now()
+				ctx := r.Context()
+				start := time.Now()
 
-			// Capture response status
-			wrapped := &loggerResponseWriter{
-				BaseResponseWriter: BaseResponseWriter{ResponseWriter: w},
-				statusCode:         http.StatusOK,
-			}
-
-			defer func() {
-				duration := time.Since(start)
-				reqID := aichteeteapee.GetRequestID(r)
-				clientIP := aichteeteapee.GetClientIP(r)
-
-				args := []any{
+				logger := slogging.GetLogger(ctx).With(
 					"method", r.Method,
 					"path", r.URL.Path,
-					"status", wrapped.getStatusCode(),
-					"duration", duration.String(),
-					"ip", clientIP,
-					"userAgent", r.Header.Get(
-						aichteeteapee.HeaderNameUserAgent,
-					),
-					"requestId", reqID,
+					"ip", aichteeteapee.GetClientIP(r),
+				)
+
+				ctx = slogging.GetCtxWithLogger(
+					ctx, logger,
+				)
+
+				wrapped := &loggerResponseWriter{
+					BaseResponseWriter: BaseResponseWriter{
+						ResponseWriter: w,
+					},
+					statusCode: http.StatusOK,
 				}
 
-				if config.IncludeQuery {
-					args = append(args, "query", r.URL.RawQuery)
-				}
+				defer func() {
+					l := slogging.GetLogger(ctx).With(
+						"status", wrapped.getStatusCode(),
+						"duration", time.Since(start).String(),
+						"userAgent", r.Header.Get(
+							aichteeteapee.HeaderNameUserAgent,
+						),
+					)
 
-				for k, v := range config.ExtraFields {
-					args = append(args, k, v)
-				}
+					if config.IncludeQuery {
+						l = l.With(
+							"query", r.URL.RawQuery,
+						)
+					}
 
-				if config.IncludeHeaders {
-					for _, header := range config.HeaderFields {
-						if value := r.Header.Get(header); value != "" {
-							args = append(args, "header_"+header, value)
+					for k, v := range config.ExtraFields {
+						l = l.With(k, v)
+					}
+
+					if config.IncludeHeaders {
+						for _, h := range config.HeaderFields {
+							if v := r.Header.Get(h); v != "" {
+								l = l.With("header_"+h, v)
+							}
 						}
 					}
-				}
 
-				config.Logger.Log(
-					ctx,
-					config.LogLevel,
-					config.Message,
-					args...,
+					l.Log(
+						ctx,
+						config.LogLevel,
+						config.Message,
+					)
+				}()
+
+				next.ServeHTTP(
+					wrapped, r.WithContext(ctx),
 				)
-			}()
-
-			next.ServeHTTP(wrapped, r)
-		})
+			},
+		)
 	}
 }
 
-// loggerResponseWriter wraps http.ResponseWriter to capture status code safely.
 type loggerResponseWriter struct {
 	BaseResponseWriter
 	statusCode    int
@@ -176,7 +171,9 @@ type loggerResponseWriter struct {
 	headerWritten bool
 }
 
-func (rw *loggerResponseWriter) WriteHeader(code int) {
+func (rw *loggerResponseWriter) WriteHeader(
+	code int,
+) {
 	rw.mu.Lock()
 
 	if !rw.headerWritten {

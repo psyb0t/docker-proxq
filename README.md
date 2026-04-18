@@ -83,9 +83,9 @@ Because why hit upstream twice when once was painful enough.
 | `CACHE_REDIS_DB` | `0` | Cache Redis DB |
 
 Cache rules:
-- Only **GET** and **HEAD** get cached. POST/PUT/DELETE/PATCH always hit upstream.
+- **Any method** gets cached. Same POST with the same body? Cache hit. Different body? Cache miss.
 - Only **2xx** responses get cached. Your 500s aren't worth remembering.
-- Cache key = `sha256(method + url)`. Simple and deterministic.
+- Cache key = `sha256(method + url + headers + body)`. Volatile headers like `X-Request-Id` are excluded via `CacheKeyExcludeHeaders`.
 
 ### HTTP server
 

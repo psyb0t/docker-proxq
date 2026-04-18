@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/psyb0t/aichteeteapee"
+	"github.com/psyb0t/common-go/slogging"
 )
 
 // timeoutResponseWriter wraps http.ResponseWriter to prevent concurrent
@@ -139,11 +139,8 @@ func Timeout(opts ...TimeoutOption) Middleware {
 				if !responseWritten {
 					responseWritten = true
 
-					slog.Info(
-						"request timeout exceeded, "+
-							"returning gateway timeout",
-						"method", r.Method,
-						"path", r.URL.Path,
+					slogging.GetLogger(r.Context()).Warn(
+						"request timeout exceeded",
 						"timeout", config.Timeout.String(),
 					)
 

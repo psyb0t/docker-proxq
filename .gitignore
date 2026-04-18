@@ -1,0 +1,10 @@
+.env
+*.db
+*.out
+*.log
+*.exe
+coverage.*
+__debug_*
+.vscode
+.idea
+.research_files

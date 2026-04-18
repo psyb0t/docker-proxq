@@ -479,26 +479,26 @@ func TestE2E_MemoryCacheHit(t *testing.T) {
 	)
 }
 
-func TestE2E_CacheSkipsPost(t *testing.T) {
+func TestE2E_CacheDifferentBodies(t *testing.T) {
 	e := setup(t, "memory")
 	defer e.cleanup()
 
 	submitAndPoll(
 		t, e.proxqURL,
-		http.MethodPost, "/no-cache-post",
-		strings.NewReader("a"),
+		http.MethodPost, "/cache-body-test",
+		strings.NewReader("body-a"),
 	)
 
 	submitAndPoll(
 		t, e.proxqURL,
-		http.MethodPost, "/no-cache-post",
-		strings.NewReader("b"),
+		http.MethodPost, "/cache-body-test",
+		strings.NewReader("body-b"),
 	)
 
 	counts := getRequestCounts(t, e.countsURL)
 	assert.Equal(
-		t, 2, counts["/no-cache-post"],
-		"POST should not be cached",
+		t, 2, counts["/cache-body-test"],
+		"different bodies = different cache keys",
 	)
 }
 

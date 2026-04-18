@@ -9,11 +9,11 @@ import (
 	"runtime/debug"
 
 	"github.com/psyb0t/aichteeteapee"
+	"github.com/psyb0t/common-go/slogging"
 )
 
 // RecoveryConfig holds configuration for recovery middleware.
 type RecoveryConfig struct {
-	Logger        *slog.Logger
 	LogLevel      slog.Level
 	LogMessage    string
 	StatusCode    int
@@ -26,14 +26,6 @@ type RecoveryConfig struct {
 
 type RecoveryOption func(*RecoveryConfig)
 
-// WithRecoveryLogger sets the logger instance.
-func WithRecoveryLogger(logger *slog.Logger) RecoveryOption {
-	return func(c *RecoveryConfig) {
-		c.Logger = logger
-	}
-}
-
-// WithRecoveryLogLevel sets the log level for panic recovery.
 func WithRecoveryLogLevel(level slog.Level) RecoveryOption {
 	return func(c *RecoveryConfig) {
 		c.LogLevel = level
@@ -102,7 +94,6 @@ func WithCustomRecoveryHandler(
 //nolint:gocognit,nestif,cyclop,funlen
 func Recovery(opts ...RecoveryOption) Middleware {
 	config := &RecoveryConfig{
-		Logger:        slog.Default(),
 		LogLevel:      slog.LevelError,
 		LogMessage:    "Panic recovered in HTTP handler",
 		StatusCode:    http.StatusInternalServerError,
@@ -130,31 +121,27 @@ func Recovery(opts ...RecoveryOption) Middleware {
 						return
 					}
 
-					reqID := aichteeteapee.GetRequestID(r)
+					logger := slogging.GetLogger(ctx)
 
-					// Build log args
-					args := []any{
+					logger = logger.With(
 						"error", recovered,
-						"method", r.Method,
-						"path", r.URL.Path,
-						"ip", aichteeteapee.GetClientIP(r),
-						"requestId", reqID,
-					}
+					)
 
-					// Add extra fields
 					for k, v := range config.ExtraFields {
-						args = append(args, k, v)
+						logger = logger.With(k, v)
 					}
 
 					if config.IncludeStack {
-						args = append(args, "stack", string(debug.Stack()))
+						logger = logger.With(
+							"stack",
+							string(debug.Stack()),
+						)
 					}
 
-					config.Logger.Log(
+					logger.Log(
 						ctx,
 						config.LogLevel,
 						config.LogMessage,
-						args...,
 					)
 
 					// Set content type if not already set
@@ -176,7 +163,7 @@ func Recovery(opts ...RecoveryOption) Middleware {
 							config.Response,
 						)
 						if err != nil {
-							config.Logger.Log(
+							logger.Log(
 								ctx,
 								config.LogLevel,
 								fmt.Sprintf(
@@ -196,7 +183,7 @@ func Recovery(opts ...RecoveryOption) Middleware {
 							if _, wErr := w.Write(
 								fallback,
 							); wErr != nil {
-								config.Logger.Log(
+								logger.Log(
 									ctx,
 									config.LogLevel,
 									fmt.Sprintf(
@@ -211,7 +198,7 @@ func Recovery(opts ...RecoveryOption) Middleware {
 							if _, wErr := w.Write(
 								jsonData,
 							); wErr != nil {
-								config.Logger.Log(
+								logger.Log(
 									ctx,
 									config.LogLevel,
 									fmt.Sprintf(
@@ -228,7 +215,7 @@ func Recovery(opts ...RecoveryOption) Middleware {
 							if _, err := w.Write(
 								[]byte(str),
 							); err != nil {
-								config.Logger.Log(
+								logger.Log(
 									ctx,
 									config.LogLevel,
 									fmt.Sprintf(

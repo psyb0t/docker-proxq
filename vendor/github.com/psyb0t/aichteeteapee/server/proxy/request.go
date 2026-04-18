@@ -16,6 +16,12 @@ type RequestPayload struct {
 }
 
 func (p *RequestPayload) Hash() string {
+	return p.HashExcluding(nil)
+}
+
+func (p *RequestPayload) HashExcluding(
+	excludeHeaders map[string]struct{},
+) string {
 	h := sha256.New()
 	h.Write([]byte(p.Method))
 	h.Write([]byte("\n"))
@@ -25,6 +31,10 @@ func (p *RequestPayload) Hash() string {
 		keys := make([]string, 0, len(p.Headers))
 
 		for k := range p.Headers {
+			if _, skip := excludeHeaders[k]; skip {
+				continue
+			}
+
 			keys = append(keys, k)
 		}
 

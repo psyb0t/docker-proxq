@@ -10,6 +10,7 @@ import (
 
 	"github.com/psyb0t/aichteeteapee"
 	"github.com/psyb0t/common-go/cache"
+	"github.com/psyb0t/common-go/slogging"
 	"github.com/psyb0t/ctxerrors"
 )
 
@@ -30,10 +31,11 @@ var hopByHopHeaders = map[string]struct{}{
 }
 
 type ForwardConfig struct {
-	HTTPClient *http.Client
-	Cache      cache.Cache
-	CacheTTL   time.Duration
-	CacheKeyFn func(p *RequestPayload) string
+	HTTPClient             *http.Client
+	Cache                  cache.Cache
+	CacheTTL               time.Duration
+	CacheKeyFn             func(p *RequestPayload) string
+	CacheKeyExcludeHeaders map[string]struct{}
 }
 
 func ForwardRequest(
@@ -41,6 +43,14 @@ func ForwardRequest(
 	cfg ForwardConfig,
 	payload *RequestPayload,
 ) (*ResponseResult, error) {
+	logger := slogging.GetLogger(ctx)
+
+	logger.Debug(
+		"forwarding request",
+		"upstreamMethod", payload.Method,
+		"upstreamURL", payload.URL,
+	)
+
 	if cfg.Cache != nil {
 		return forwardWithCache(ctx, cfg, payload)
 	}
@@ -55,14 +65,8 @@ func forwardWithCache(
 ) (*ResponseResult, error) {
 	key := cacheKey(cfg, payload)
 
-	data, err := cfg.Cache.Get(ctx, key)
-	if err == nil {
-		var result ResponseResult
-		if jsonErr := json.Unmarshal(
-			data, &result,
-		); jsonErr == nil {
-			return &result, nil
-		}
+	if result, ok := tryCache(ctx, cfg, key); ok {
+		return result, nil
 	}
 
 	result, err := doUpstreamRequest(
@@ -72,21 +76,81 @@ func forwardWithCache(
 		return nil, err
 	}
 
-	if result.StatusCode >= http.StatusOK &&
-		result.StatusCode < http.StatusMultipleChoices {
-		ttl := cfg.CacheTTL
-		if ttl == 0 {
-			ttl = defaultCacheTTL
-		}
-
-		if encoded, jsonErr := json.Marshal(
-			result,
-		); jsonErr == nil {
-			_ = cfg.Cache.Set(ctx, key, encoded, ttl)
-		}
-	}
+	storeInCache(ctx, cfg, key, result)
 
 	return result, nil
+}
+
+func tryCache(
+	ctx context.Context,
+	cfg ForwardConfig,
+	key string,
+) (*ResponseResult, bool) {
+	logger := slogging.GetLogger(ctx)
+
+	data, err := cfg.Cache.Get(ctx, key)
+	if err != nil {
+		return nil, false
+	}
+
+	var result ResponseResult
+
+	if jsonErr := json.Unmarshal(
+		data, &result,
+	); jsonErr != nil {
+		logger.Warn(
+			"cache entry corrupt",
+			"cacheKey", key,
+			"error", jsonErr,
+		)
+
+		return nil, false
+	}
+
+	logger.Debug(
+		"cache hit",
+		"cacheKey", key,
+		"statusCode", result.StatusCode,
+	)
+
+	return &result, true
+}
+
+func storeInCache(
+	ctx context.Context,
+	cfg ForwardConfig,
+	key string,
+	result *ResponseResult,
+) {
+	logger := slogging.GetLogger(ctx)
+
+	if result.StatusCode < http.StatusOK ||
+		result.StatusCode >= http.StatusMultipleChoices {
+		logger.Debug(
+			"not caching non-2xx response",
+			"statusCode", result.StatusCode,
+		)
+
+		return
+	}
+
+	ttl := cfg.CacheTTL
+	if ttl == 0 {
+		ttl = defaultCacheTTL
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return
+	}
+
+	_ = cfg.Cache.Set(ctx, key, encoded, ttl)
+
+	logger.Debug(
+		"cached response",
+		"cacheKey", key,
+		"ttl", ttl.String(),
+	)
 }
 
 func doUpstreamRequest(
@@ -94,33 +158,22 @@ func doUpstreamRequest(
 	httpClient *http.Client,
 	payload *RequestPayload,
 ) (*ResponseResult, error) {
-	var bodyReader io.Reader
-	if len(payload.Body) > 0 {
-		bodyReader = bytes.NewReader(payload.Body)
-	}
+	start := time.Now()
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		payload.Method,
-		payload.URL,
-		bodyReader,
-	)
+	req, err := buildUpstreamReq(ctx, payload)
 	if err != nil {
-		return nil, ctxerrors.Wrap(
-			err, "create request",
-		)
+		return nil, err
 	}
-
-	if len(payload.Body) > 0 {
-		req.ContentLength = int64(
-			len(payload.Body),
-		)
-	}
-
-	setUpstreamHeaders(req, payload)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		slogging.GetLogger(ctx).Error(
+			"upstream request failed",
+			"upstreamURL", payload.URL,
+			"duration", time.Since(start).String(),
+			"error", err,
+		)
+
 		return nil, ctxerrors.Wrap(
 			err, "do request",
 		)
@@ -137,11 +190,69 @@ func doUpstreamRequest(
 		)
 	}
 
+	logUpstreamResponse(
+		ctx, payload.URL,
+		resp.StatusCode, len(respBody),
+		time.Since(start),
+	)
+
 	return &ResponseResult{
 		StatusCode: resp.StatusCode,
 		Headers:    resp.Header,
 		Body:       respBody,
 	}, nil
+}
+
+func buildUpstreamReq(
+	ctx context.Context,
+	payload *RequestPayload,
+) (*http.Request, error) {
+	var bodyReader io.Reader
+	if len(payload.Body) > 0 {
+		bodyReader = bytes.NewReader(payload.Body)
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx, payload.Method,
+		payload.URL, bodyReader,
+	)
+	if err != nil {
+		return nil, ctxerrors.Wrap(
+			err, "create request",
+		)
+	}
+
+	if len(payload.Body) > 0 {
+		req.ContentLength = int64(
+			len(payload.Body),
+		)
+	}
+
+	setUpstreamHeaders(req, payload)
+
+	return req, nil
+}
+
+func logUpstreamResponse(
+	ctx context.Context,
+	url string,
+	statusCode, bodySize int,
+	duration time.Duration,
+) {
+	logger := slogging.GetLogger(ctx).With(
+		"upstreamURL", url,
+		"statusCode", statusCode,
+		"duration", duration.String(),
+		"bodySize", bodySize,
+	)
+
+	if statusCode >= http.StatusInternalServerError {
+		logger.Warn("upstream returned server error")
+
+		return
+	}
+
+	logger.Debug("upstream response received")
 }
 
 func setUpstreamHeaders(
@@ -216,5 +327,7 @@ func cacheKey(
 		return cfg.CacheKeyFn(payload)
 	}
 
-	return payload.Hash()
+	return payload.HashExcluding(
+		cfg.CacheKeyExcludeHeaders,
+	)
 }
