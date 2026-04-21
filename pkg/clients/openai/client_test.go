@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	proxqtypes "github.com/psyb0t/proxq/pkg/types"
+	proxqtypes "github.com/psyb0t/docker-proxq/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

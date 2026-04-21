@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/psyb0t/aichteeteapee"
-	"github.com/psyb0t/proxq/internal/config"
+	"github.com/psyb0t/docker-proxq/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/psyb0t/proxq/internal/config"
-	"github.com/psyb0t/proxq/internal/testinfra"
+	"github.com/psyb0t/docker-proxq/internal/config"
+	"github.com/psyb0t/docker-proxq/internal/testinfra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

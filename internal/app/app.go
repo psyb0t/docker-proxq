@@ -16,8 +16,8 @@ import (
 	"github.com/psyb0t/aichteeteapee/serbewr/middleware"
 	"github.com/psyb0t/common-go/cache"
 	"github.com/psyb0t/ctxerrors"
-	"github.com/psyb0t/proxq/internal/config"
-	proxqproxy "github.com/psyb0t/proxq/internal/proxy"
+	"github.com/psyb0t/docker-proxq/internal/config"
+	proxqproxy "github.com/psyb0t/docker-proxq/internal/proxy"
 	"github.com/redis/go-redis/v9"
 )
 

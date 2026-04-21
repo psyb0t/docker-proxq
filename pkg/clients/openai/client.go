@@ -12,7 +12,7 @@ import (
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/psyb0t/ctxerrors"
-	proxqtypes "github.com/psyb0t/proxq/pkg/types"
+	proxqtypes "github.com/psyb0t/docker-proxq/pkg/types"
 )
 
 const (

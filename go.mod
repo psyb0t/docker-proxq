@@ -1,4 +1,4 @@
-module github.com/psyb0t/proxq
+module github.com/psyb0t/docker-proxq
 
 go 1.26
 

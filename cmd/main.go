@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/psyb0t/proxq/internal/app"
+	"github.com/psyb0t/docker-proxq/internal/app"
 	_ "github.com/psyb0t/slog-configurator"
 )
 

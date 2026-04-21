@@ -11,7 +11,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	prawxxey "github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
-	"github.com/psyb0t/proxq/internal/testinfra"
+	"github.com/psyb0t/docker-proxq/internal/testinfra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

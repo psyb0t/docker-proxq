@@ -7,7 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/aichteeteapee/serbewr/prawxxey"
-	proxqtypes "github.com/psyb0t/proxq/pkg/types"
+	proxqtypes "github.com/psyb0t/docker-proxq/pkg/types"
 )
 
 const TaskTypeName = "proxy:request"
