@@ -1,7 +1,7 @@
 # proxq
 
 [![Docker Hub](https://img.shields.io/docker/pulls/psyb0t/proxq?style=flat-square)](https://hub.docker.com/r/psyb0t/proxq)
-[![Go Reference](https://pkg.go.dev/badge/github.com/psyb0t/proxq.svg)](https://pkg.go.dev/github.com/psyb0t/proxq)
+[![Go Reference](https://pkg.go.dev/badge/github.com/psyb0t/docker-proxq.svg)](https://pkg.go.dev/github.com/psyb0t/docker-proxq)
 
 The honey badger of HTTP proxies. Takes your request, throws it in a Redis-backed job queue, and deals with it when it damn well pleases. You get a job ID back instantly — come back later to pick up the goods.
 
@@ -460,7 +460,7 @@ All original request headers are preserved. Hop-by-hop headers (`Connection`, `K
 Drop-in replacement for [`openai-go`](https://github.com/openai/openai-go). Swap one line and all your SDK calls go through proxq transparently — chat completions, embeddings, images, audio, everything.
 
 ```go
-import proxqopenai "github.com/psyb0t/proxq/pkg/clients/openai"
+import proxqopenai "github.com/psyb0t/docker-proxq/pkg/clients/openai"
 
 // Before: client := openai.NewClient(option.WithAPIKey("sk-..."))
 // After:
