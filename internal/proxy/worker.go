@@ -14,8 +14,6 @@ import (
 	"github.com/psyb0t/ctxerrors"
 )
 
-const defaultUpstreamTimeout = 5 * time.Minute
-
 //nolint:gochecknoglobals
 var defaultCacheKeyExcludeHeaders = map[string]struct{}{
 	aichteeteapee.HeaderNameXRequestID:      {},
@@ -35,15 +33,10 @@ type Worker struct {
 }
 
 func NewWorker(cfg WorkerConfig) *Worker {
-	timeout := cfg.UpstreamTimeout
-	if timeout == 0 {
-		timeout = defaultUpstreamTimeout
-	}
-
 	return &Worker{
 		forwardCfg: prawxxey.ForwardConfig{
 			HTTPClient: &http.Client{
-				Timeout: timeout,
+				Timeout: cfg.UpstreamTimeout,
 			},
 			Cache:    cfg.Cache,
 			CacheTTL: cfg.CacheTTL,

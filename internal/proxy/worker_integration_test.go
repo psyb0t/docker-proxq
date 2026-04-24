@@ -16,6 +16,90 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// slowUpstream returns a test server that sleeps for d before responding.
+func slowUpstream(d time.Duration) *httptest.Server {
+	return httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			select {
+			case <-time.After(d):
+				w.WriteHeader(http.StatusOK)
+			case <-r.Context().Done():
+			}
+		}),
+	)
+}
+
+func makeTask(t *testing.T, url string) *asynq.Task {
+	t.Helper()
+
+	data, err := json.Marshal(taskEnvelope{
+		Request: prawxxey.RequestPayload{
+			Method: http.MethodGet,
+			URL:    url,
+		},
+	})
+	require.NoError(t, err)
+
+	return asynq.NewTask(TaskTypeName, data)
+}
+
+// TestWorker_ProcessTask_ContextDeadlineKillsRequest verifies that when
+// http.Client.Timeout is 0 (no hardcoded timeout), a context deadline
+// cancels the upstream HTTP request at the right time.
+func TestWorker_ProcessTask_ContextDeadlineKillsRequest(
+	t *testing.T,
+) {
+	upstream := slowUpstream(2 * time.Second)
+	defer upstream.Close()
+
+	w := NewWorker(WorkerConfig{}) // UpstreamTimeout=0, relies on ctx
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 200*time.Millisecond,
+	)
+	defer cancel()
+
+	start := time.Now()
+
+	err := w.ProcessTask(ctx, makeTask(t, upstream.URL))
+
+	elapsed := time.Since(start)
+
+	assert.Error(t, err)
+	assert.Less(t, elapsed, time.Second,
+		"should have been killed by context at ~200ms, not after %s", elapsed,
+	)
+}
+
+// TestWorker_ProcessTask_UpstreamTimeoutKillsRequest verifies that an
+// explicit UpstreamTimeout (http.Client.Timeout) also cancels slow requests.
+func TestWorker_ProcessTask_UpstreamTimeoutKillsRequest(
+	t *testing.T,
+) {
+	upstream := slowUpstream(2 * time.Second)
+	defer upstream.Close()
+
+	w := NewWorker(WorkerConfig{
+		UpstreamTimeout: 200 * time.Millisecond,
+	})
+
+	start := time.Now()
+
+	err := w.ProcessTask(
+		context.Background(), makeTask(t, upstream.URL),
+	)
+
+	elapsed := time.Since(start)
+
+	assert.Error(t, err)
+	assert.Less(t, elapsed, time.Second,
+		"should have been killed by http.Client.Timeout at ~200ms, not after %s", elapsed,
+	)
+}
+
 func TestWorker_ProcessTask_InvalidPayload(
 	t *testing.T,
 ) {

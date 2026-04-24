@@ -19,7 +19,7 @@ func TestNewWorker(t *testing.T) {
 		{
 			name:          "all defaults",
 			cfg:           WorkerConfig{},
-			expectTimeout: defaultUpstreamTimeout,
+			expectTimeout: 0,
 		},
 		{
 			name: "custom values",
