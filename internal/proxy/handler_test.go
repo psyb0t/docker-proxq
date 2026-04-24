@@ -355,6 +355,70 @@ func TestStripPrefix(t *testing.T) {
 	}
 }
 
+func TestParseRequestTimeout(t *testing.T) {
+	tests := []struct {
+		name        string
+		header      string
+		expect      time.Duration
+		expectError bool
+	}{
+		{
+			name:   "no header",
+			header: "",
+			expect: 0,
+		},
+		{
+			name:   "seconds",
+			header: "30s",
+			expect: 30 * time.Second,
+		},
+		{
+			name:   "minutes and seconds",
+			header: "2m1s",
+			expect: 2*time.Minute + time.Second,
+		},
+		{
+			name:   "hours",
+			header: "1h",
+			expect: time.Hour,
+		},
+		{
+			name:        "invalid value",
+			header:      "bananas",
+			expectError: true,
+		},
+		{
+			name:        "plain number no unit",
+			header:      "60",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(
+				http.MethodGet, "/", nil,
+			)
+			if tt.header != "" {
+				req.Header.Set(
+					HeaderNameXProxqTimeout, tt.header,
+				)
+			}
+
+			got, err := parseRequestTimeout(req)
+
+			if tt.expectError {
+				assert.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expect, got)
+		})
+	}
+}
+
 func TestNewHandler(t *testing.T) {
 	tests := []struct {
 		name            string

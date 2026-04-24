@@ -347,18 +347,48 @@ func (h *Handler) proxyWebSocket(
 	u.reverseProxy.ServeHTTP(w, r)
 }
 
-func (h *Handler) enqueueRequest(
-	w http.ResponseWriter,
+func parseRequestTimeout(
+	r *http.Request,
+) (time.Duration, error) {
+	val := r.Header.Get(HeaderNameXProxqTimeout)
+	if val == "" {
+		return 0, nil
+	}
+
+	d, err := time.ParseDuration(val)
+	if err != nil {
+		return 0, ctxerrors.Wrap(err, "parse duration")
+	}
+
+	return d, nil
+}
+
+func resolveTimeout(
 	r *http.Request,
 	u *upstream,
-	strippedURI string,
-) {
-	logger := slogging.GetLogger(r.Context())
+) (time.Duration, error) {
+	reqTimeout, err := parseRequestTimeout(r)
+	if err != nil {
+		return 0, err
+	}
 
+	if reqTimeout > 0 {
+		return reqTimeout, nil
+	}
+
+	return u.timeout, nil
+}
+
+func readBody(
+	w http.ResponseWriter,
+	r *http.Request,
+	maxBodySize int64,
+) ([]byte, bool) {
 	body, err := io.ReadAll(
-		io.LimitReader(r.Body, u.maxBodySize),
+		io.LimitReader(r.Body, maxBodySize),
 	)
 	if err != nil {
+		logger := slogging.GetLogger(r.Context())
 		logger.Error(
 			"failed to read request body",
 			"error", err,
@@ -368,13 +398,42 @@ func (h *Handler) enqueueRequest(
 			w, http.StatusInternalServerError,
 		)
 
+		return nil, false
+	}
+
+	return body, true
+}
+
+func (h *Handler) enqueueRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	u *upstream,
+	strippedURI string,
+) {
+	logger := slogging.GetLogger(r.Context())
+
+	body, ok := readBody(w, r, u.maxBodySize)
+	if !ok {
+		return
+	}
+
+	timeout, err := resolveTimeout(r, u)
+	if err != nil {
+		logger.Warn(
+			"invalid X-Proxq-Timeout header",
+			"value", r.Header.Get(HeaderNameXProxqTimeout),
+			"error", err,
+		)
+		setProxqSourceHeader(w)
+		proxylib.WriteError(w, http.StatusBadRequest)
+
 		return
 	}
 
 	envelope := buildEnvelope(r, u, strippedURI, body)
 
 	taskID, err := h.enqueue(
-		r, envelope, u.timeout, u.maxRetries,
+		r, envelope, timeout, u.maxRetries,
 	)
 	if err != nil {
 		logger.Error(

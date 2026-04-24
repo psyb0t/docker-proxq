@@ -15,8 +15,9 @@ const TaskTypeName = "proxy:request"
 const DefaultQueue = "default"
 
 const (
-	HeaderNameXProxqSource = proxqtypes.HeaderNameXProxqSource
-	HeaderValueProxq       = proxqtypes.HeaderValueProxq
+	HeaderNameXProxqSource  = proxqtypes.HeaderNameXProxqSource
+	HeaderNameXProxqTimeout = proxqtypes.HeaderNameXProxqTimeout
+	HeaderValueProxq        = proxqtypes.HeaderValueProxq
 )
 
 type Status string
