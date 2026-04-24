@@ -96,7 +96,7 @@ func TestWorker_ProcessTask_UpstreamTimeoutKillsRequest(
 
 	assert.Error(t, err)
 	assert.Less(t, elapsed, time.Second,
-		"should have been killed by http.Client.Timeout at ~200ms, not after %s", elapsed,
+		"should die at ~200ms via http.Client.Timeout, not after %s", elapsed,
 	)
 }
 
