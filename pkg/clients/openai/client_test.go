@@ -527,6 +527,7 @@ func TestBuildTransport_CustomConfig(t *testing.T) {
 		ProxqBaseURL: "http://proxq:9090",
 		JobsPath:     "/status",
 		PollInterval: 2 * time.Second,
+		Timeout:      5 * time.Minute,
 		HTTPClient:   customClient,
 	})
 
@@ -537,7 +538,83 @@ func TestBuildTransport_CustomConfig(t *testing.T) {
 	assert.Equal(
 		t, 2*time.Second, transport.pollInterval,
 	)
+	assert.Equal(t, 5*time.Minute, transport.timeout)
 	assert.Equal(t, customClient, transport.httpClient)
+}
+
+func TestTransport_TimeoutHeaderSent(t *testing.T) {
+	var gotHeader string
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			gotHeader = r.Header.Get(
+				proxqtypes.HeaderNameXProxqTimeout,
+			)
+
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer srv.Close()
+
+	transport := buildTransport(Config{
+		ProxqBaseURL: srv.URL,
+		Timeout:      2*time.Minute + 30*time.Second,
+		HTTPClient:   srv.Client(),
+	})
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		srv.URL+"/v1/chat/completions",
+		strings.NewReader(`{}`),
+	)
+	require.NoError(t, err)
+
+	resp, _ := transport.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	assert.Equal(t, "2m30s", gotHeader)
+}
+
+func TestTransport_NoTimeoutHeaderWhenZero(t *testing.T) {
+	var gotHeader string
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			gotHeader = r.Header.Get(
+				proxqtypes.HeaderNameXProxqTimeout,
+			)
+
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer srv.Close()
+
+	transport := buildTransport(Config{
+		ProxqBaseURL: srv.URL,
+		HTTPClient:   srv.Client(),
+	})
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		srv.URL+"/v1/chat/completions",
+		strings.NewReader(`{}`),
+	)
+	require.NoError(t, err)
+
+	resp, _ := transport.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	assert.Empty(t, gotHeader)
 }
 
 func TestTransport_ContextCancellation(t *testing.T) {

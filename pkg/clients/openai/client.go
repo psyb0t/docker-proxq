@@ -25,6 +25,7 @@ type Config struct {
 	APIKey       string
 	JobsPath     string
 	PollInterval time.Duration
+	Timeout      time.Duration
 	HTTPClient   *http.Client
 }
 
@@ -99,6 +100,7 @@ func buildTransport(cfg Config) *proxqTransport {
 	return &proxqTransport{
 		jobsBaseURL:  jobsBaseURL,
 		pollInterval: pollInterval,
+		timeout:      cfg.Timeout,
 		httpClient:   httpClient,
 	}
 }
@@ -115,12 +117,20 @@ type jobStatus struct {
 type proxqTransport struct {
 	jobsBaseURL  *url.URL
 	pollInterval time.Duration
+	timeout      time.Duration
 	httpClient   *http.Client
 }
 
 func (t *proxqTransport) RoundTrip(
 	req *http.Request,
 ) (*http.Response, error) {
+	if t.timeout > 0 {
+		req.Header.Set(
+			proxqtypes.HeaderNameXProxqTimeout,
+			t.timeout.String(),
+		)
+	}
+
 	resp, err := t.httpClient.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, ctxerrors.Wrap(
