@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.1 — 2026-07-25
+
+### Fixed
+- **`govulncheck` (CI security scan).** Bumped `golang.org/x/crypto` v0.50.0 → v0.54.0 to clear the reachable `crypto/ssh` advisories (GO-2026-5013…5020, fixed in v0.52.0) that `govulncheck` flagged via the testcontainers teardown path in `internal/testinfra/redis.go`. Vendored deps refreshed. No production-code or API change.
+
 ## v0.10.0 — 2026-07-25
 
 ### Added
