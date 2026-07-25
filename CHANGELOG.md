@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.0 — 2026-07-25
+
+### Added
+- **Agent skill + ClawHub publish.** Added `.agents/skills/proxq/` (SKILL.md + `references/setup.md`) documenting the async submit → poll (`GET /__jobs/{id}`) → fetch-content (`GET /__jobs/{id}/content`) → cancel (`DELETE /__jobs/{id}`) flow, the `config.yaml` schema, and the no-built-in-auth posture. The pipeline now publishes the skill to ClawHub on tag pushes, after the image build + release.
+
 ## v0.8.0 — 2026-04-24
 
 ### Fixed

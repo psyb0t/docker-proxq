@@ -14,11 +14,26 @@ jobs:
 
   docker:
     needs: go
+    permissions:
+      contents: write # GitHub Release
+      security-events: write # upload the Grype SARIF to the Security tab
     uses: psyb0t/reusable-github-workflows/.github/workflows/docker-image-workflow.yml@master
     with:
       repository_name: psyb0t/proxq
       target_platforms: "linux/amd64,linux/arm64"
       scan_severity: "high"
+      # Report scan findings to the Security tab but don't fail the run, so the
+      # clawhub publish job below can depend on this workflow succeeding.
+      scan_fail_build: false
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # Publish the skill (.agents/skills/) to ClawHub. Tag pushes ONLY, after the
+  # image build + GitHub release have succeeded.
+  publish-to-clawhub:
+    needs: [docker]
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: psyb0t/reusable-github-workflows/.github/workflows/clawhub-publish.yml@master
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}
