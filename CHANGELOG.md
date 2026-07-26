@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.2 — 2026-07-26
+
+### Changed
+- **Agent skill docs hardened.** Strengthened the `DELETE /__jobs/{id}` guidance in `.agents/skills/proxq/SKILL.md` with an explicit destructive-operation guardrail: no ownership check exists, so an agent must only cancel a job it just submitted or one the user explicitly named, and must never enumerate job IDs and bulk-cancel. No behavior change — documentation only, additive to the existing SSRF and no-auth warnings.
+
 ## v0.10.1 — 2026-07-25
 
 ### Fixed

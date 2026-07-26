@@ -22,7 +22,7 @@ For installation, configuration, and container setup, see [references/setup.md](
 - **No built-in authentication or authorization.** proxq ships with zero auth — no API key, no bearer token, no allowlist. Anyone who can reach `PROXQ_URL` can submit jobs, poll any job ID, and cancel any job ID (job IDs are UUIDv4 but there is no ownership check). Front it with a reverse proxy doing auth (basic auth, mTLS, an API gateway) or bind it to loopback/an internal network only — do not expose a bare proxq instance to the open internet.
 - **Trusted upstreams only.** Configure `upstreams[].url` to point only at backends you control or explicitly trust. proxq forwards the full original request (method, headers, body) plus `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto` — treat the upstream config the same way you'd treat a reverse-proxy target list.
 - **Consumer-only.** This skill talks to an instance you (or your operator) already run and trust. It never provisions, hardens, or reconfigures the server — that's covered in setup.md as an explicit operator step.
-- **Cancel is destructive-ish but idempotent-safe** — `DELETE /__jobs/{id}` best-effort cancels an in-flight job and deletes its record; there's no undo, but it only affects the one job ID you name. Not a big blast-radius risk, no special confirmation needed beyond normal care with the ID.
+- **`DELETE /__jobs/{id}` is destructive & irreversible, with no ownership check.** It best-effort cancels an in-flight job and deletes its task record — no undo, and (per the no-auth point above) proxq does not verify who submitted the job, so any caller who can reach the instance and knows/guesses a job ID can cancel it, not just its submitter. An agent must NEVER call it unless the user explicitly asked to cancel that exact job; confirm the specific job ID first (the one you just submitted, or the one the user named); never enumerate job IDs and bulk-cancel. On a shared/multi-tenant instance this can cancel another caller's in-flight job — treat cancellation as admin-only unless you're certain the job is yours.
 
 ## When To Use
 
@@ -112,6 +112,8 @@ curl -s -X DELETE "$PROXQ_URL/__jobs/550e8400-e29b-41d4-a716-446655440000"
 ```
 
 Best-effort: attempts to stop in-flight processing, then deletes the task record. Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`.
+
+**Destructive & irreversible.** `DELETE /__jobs/{id}` cancels the job and deletes its record with no undo, and there is no ownership check — any job ID you can supply gets cancelled, whether or not it's one you submitted. An agent must NEVER call this unless the user explicitly asked to cancel that exact job; confirm the specific job ID first; never enumerate-then-bulk-cancel. On a shared/multi-tenant instance this can disrupt other callers' in-flight jobs.
 
 ### Poll loop example
 
