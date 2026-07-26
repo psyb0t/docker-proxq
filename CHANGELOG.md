@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.3 — 2026-07-26
+
+Skill docs de-duplicated. Documentation only, no behavior change.
+
+- Collapsed the two repeated `DELETE /__jobs/{id}` cancellation warnings in `.agents/skills/proxq/SKILL.md` into a single Security & safety note plus the API reference, instead of restating the same guidance twice.
+
 ## v0.10.2 — 2026-07-26
 
 ### Changed
