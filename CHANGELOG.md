@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.4 — 2026-07-27
+
+- Added self-hosted version and license badges plus a Docker Hub pulls badge; wired a badges job into pipeline.yml.
+
 ## v0.10.3 — 2026-07-26
 
 Skill docs de-duplicated. Documentation only, no behavior change.

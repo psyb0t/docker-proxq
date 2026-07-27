@@ -1,7 +1,8 @@
 # proxq
 
-[![Docker Hub](https://img.shields.io/docker/pulls/psyb0t/proxq?style=flat-square)](https://hub.docker.com/r/psyb0t/proxq)
-[![Go Reference](https://pkg.go.dev/badge/github.com/psyb0t/docker-proxq.svg)](https://pkg.go.dev/github.com/psyb0t/docker-proxq)
+[![version](https://raw.githubusercontent.com/psyb0t/docker-proxq/badges/version.svg)](https://github.com/psyb0t/docker-proxq/releases)
+[![license](https://raw.githubusercontent.com/psyb0t/docker-proxq/badges/license.svg)](LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/psyb0t/proxq?style=flat-square)](https://hub.docker.com/r/psyb0t/proxq)
 
 The honey badger of HTTP proxies. Takes your request, throws it in a Redis-backed job queue, and deals with it when it damn well pleases. You get a job ID back instantly — come back later to pick up the goods.
 
