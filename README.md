@@ -506,10 +506,12 @@ Claude Code prompts for the proxq base URL (`PROXQ_URL`) at enable time.
 
 ```bash
 codex plugin marketplace add psyb0t/agents
+codex plugin add proxq@psyb0t
 ```
 
-Codex also picks the skill up automatically in any repo containing `.agents/skills/`, and
-invokes it as `$proxq`.
+Installed via the marketplace, the skill invokes as `$proxq:proxq`. Codex also picks the
+skill up automatically — no install needed — in any repo containing `.agents/skills/`,
+where it invokes as plain `$proxq`.
 
 ### OpenClaw
 

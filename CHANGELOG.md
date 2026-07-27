@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.9 — 2026-07-27
+
+- The Codex subsection of the `## Agent integrations` README section was missing its install command — it told readers to run `codex plugin marketplace add psyb0t/agents` and stopped there. Added the missing `codex plugin add proxq@psyb0t` line.
+- Clarified that the invocation form depends on how the skill was picked up: installed via the marketplace it invokes as `$proxq:proxq`, while Codex's automatic pickup from a repo's own `.agents/skills/` (no install needed) invokes it as plain `$proxq`.
+
 ## v0.10.8 — 2026-07-27
 
 - Added `.agents/.claude-plugin/plugin.json` and `.agents/.codex-plugin/plugin.json` manifests, making the existing `.agents/skills/proxq` skill installable natively via `claude plugin install proxq@psyb0t` and `codex plugin marketplace add psyb0t/agents`.
