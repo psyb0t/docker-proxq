@@ -1,5 +1,6 @@
 # proxq
 
+[![coverage](https://raw.githubusercontent.com/psyb0t/docker-proxq/badges/coverage.svg)](https://github.com/psyb0t/docker-proxq/actions/workflows/pipeline.yml)
 [![version](https://raw.githubusercontent.com/psyb0t/docker-proxq/badges/version.svg)](https://github.com/psyb0t/docker-proxq/releases)
 [![license](https://raw.githubusercontent.com/psyb0t/docker-proxq/badges/license.svg)](LICENSE)
 [![Docker Pulls](https://img.shields.io/docker/pulls/psyb0t/proxq?style=flat-square)](https://hub.docker.com/r/psyb0t/proxq)

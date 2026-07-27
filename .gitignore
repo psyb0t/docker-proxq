@@ -4,6 +4,7 @@
 *.log
 *.exe
 coverage.*
+coverage-percent.txt
 __debug_*
 .vscode
 .idea

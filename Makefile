@@ -12,13 +12,18 @@ dep: ## Download and tidy dependencies
 	@go mod tidy
 	@go mod vendor
 
-lint: ## Lint all Go files
+lint: ## Lint all Golang files
 	@echo "Linting all Go files..."
-	@go fix ./...
+	@out=$$(go fix -diff ./... 2>&1); \
+	if [ -n "$$out" ]; then \
+		echo "$$out"; \
+		echo "go fix found issues. Run 'make lint-fix' to apply."; \
+		exit 1; \
+	fi
 	@go tool golangci-lint run --timeout=30m0s ./...
 
-lint-fix: ## Lint and auto-fix
-	@echo "Linting and fixing Go files..."
+lint-fix: ## Lint all Golang files and fix
+	@echo "Linting and fixing all Go files..."
 	@go fix ./...
 	@go tool golangci-lint run --fix --timeout=30m0s ./...
 
@@ -38,6 +43,8 @@ test-coverage: ## Run tests with coverage check. Fails if coverage is below the 
 		exit 1; \
 	fi; \
 	result=$$(go tool cover -func=coverage.txt | grep -oP 'total:\s+\(statements\)\s+\K\d+' || echo "0"); \
+	pct=$$(go tool cover -func=coverage.txt | grep -oP 'total:\s+\(statements\)\s+\K[0-9.]+' || echo "0"); \
+	echo "$$pct" > coverage-percent.txt; \
 	if [ $$result -eq 0 ]; then \
 		echo "No test coverage information available."; \
 		exit 0; \

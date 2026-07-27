@@ -2,15 +2,10 @@ package testinfra
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/hibiken/asynq"
+	"github.com/psyb0t/ctxerrors"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-)
-
-var errUnexpectedRedisOptType = errors.New(
-	"unexpected redis option type",
 )
 
 type Redis struct {
@@ -23,8 +18,8 @@ func SetupRedis(ctx context.Context) (*Redis, error) {
 		ctx, "redis:7-alpine",
 	)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"start redis container: %w", err,
+		return nil, ctxerrors.Wrap(
+			err, "start redis container",
 		)
 	}
 
@@ -32,8 +27,8 @@ func SetupRedis(ctx context.Context) (*Redis, error) {
 	if err != nil {
 		_ = container.Terminate(ctx)
 
-		return nil, fmt.Errorf(
-			"get redis connection string: %w", err,
+		return nil, ctxerrors.Wrap(
+			err, "get redis connection string",
 		)
 	}
 
@@ -41,8 +36,8 @@ func SetupRedis(ctx context.Context) (*Redis, error) {
 	if err != nil {
 		_ = container.Terminate(ctx)
 
-		return nil, fmt.Errorf(
-			"parse redis URI: %w", err,
+		return nil, ctxerrors.Wrap(
+			err, "parse redis URI",
 		)
 	}
 
@@ -50,9 +45,8 @@ func SetupRedis(ctx context.Context) (*Redis, error) {
 	if !ok {
 		_ = container.Terminate(ctx)
 
-		return nil, fmt.Errorf(
-			"redis option type %T: %w",
-			opt, errUnexpectedRedisOptType,
+		return nil, ctxerrors.Wrapf(
+			errUnexpectedRedisOptType, "redis option type %T", opt,
 		)
 	}
 

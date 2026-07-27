@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.5 — 2026-07-27
+
+- Go 1.26; `make lint` now runs `go fix -diff ./...` first (fails with a fix hint before golangci-lint even runs) and `make lint-fix` applies `go fix` before the golangci-lint auto-fix pass.
+- Coverage badge: `make test-coverage` now also writes the total coverage percentage to `coverage-percent.txt`; `pipeline.yml`'s `go` job reads it via `coverage_file`, and the `badges` job now generates the coverage badge alongside version/license.
+- `internal/testinfra/redis.go` (testcontainers Redis setup used by the integration tests) switched from `fmt.Errorf` to `ctxerrors.Wrap`/`ctxerrors.Wrapf`, and its sentinel error moved into `internal/testinfra/errors.go`. No behavior change — error messages are unchanged, wrapping now carries file/line/function context.
+- Logging (structured `log/slog` via `slog-configurator`) and the rest of the error wrapping (`ctxerrors` + sentinel `errors.go` files) were already in place across the codebase — verified, no further changes needed.
+
 ## v0.10.4 — 2026-07-27
 
 - Added self-hosted version and license badges plus a Docker Hub pulls badge; wired a badges job into pipeline.yml.
