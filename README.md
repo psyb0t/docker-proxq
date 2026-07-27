@@ -35,6 +35,7 @@ Oh, and it caches too. Because hitting the same endpoint twice is for people who
   - [Validation rules](#validation-rules)
 - [Headers](#headers)
 - [Client libraries](#client-libraries)
+- [Agent integrations](#agent-integrations)
 - [Use cases](#use-cases)
 - [Architecture](#architecture)
 - [Development](#development)
@@ -486,6 +487,37 @@ fmt.Println(resp.Choices[0].Message.Content)
 The client injects a custom `http.RoundTripper` into the SDK. Non-streaming requests get enqueued, polled, and returned as if you called OpenAI directly. Streaming and direct-proxied responses pass through as-is. Your `HTTPClient` settings (TLS config, timeouts, cookie jar) are fully preserved.
 
 See [`pkg/clients/openai/README.md`](pkg/clients/openai/README.md) for the full docs.
+
+## Agent integrations
+
+The [skill](.agents/skills/proxq) works in any agent that reads `.agents/skills/`, and
+installs natively in the clients below.
+
+### Claude Code
+
+```bash
+claude plugin marketplace add psyb0t/agents
+claude plugin install proxq@psyb0t
+```
+
+Claude Code prompts for the proxq base URL (`PROXQ_URL`) at enable time.
+
+### Codex
+
+```bash
+codex plugin marketplace add psyb0t/agents
+```
+
+Codex also picks the skill up automatically in any repo containing `.agents/skills/`, and
+invokes it as `$proxq`.
+
+### OpenClaw
+
+The skill is published to ClawHub on every release:
+
+```bash
+openclaw skills install @psyb0t/proxq
+```
 
 ## Use cases
 

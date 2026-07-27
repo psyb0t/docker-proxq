@@ -1,0 +1,16 @@
+{
+  "name": "proxq",
+  "description": "Redis-backed async HTTP proxy queue built on asynq — submit any request, get a job ID back instantly, poll for status, and fetch the replayed upstream response.",
+  "author": { "name": "psyb0t", "url": "https://github.com/psyb0t" },
+  "homepage": "https://github.com/psyb0t/docker-proxq",
+  "license": "MIT",
+  "keywords": ["async-proxy", "redis", "job-queue", "reverse-proxy", "webhook-relay", "asynq", "caching"],
+  "userConfig": {
+    "proxq_url": {
+      "type": "string",
+      "title": "proxq URL",
+      "description": "Base URL of your running proxq instance (PROXQ_URL), e.g. http://localhost:8080. proxq ships with no built-in authentication.",
+      "required": true
+    }
+  }
+}

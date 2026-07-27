@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.8 — 2026-07-27
+
+- Added `.agents/.claude-plugin/plugin.json` and `.agents/.codex-plugin/plugin.json` manifests, making the existing `.agents/skills/proxq` skill installable natively via `claude plugin install proxq@psyb0t` and `codex plugin marketplace add psyb0t/agents`.
+- Added a `## Agent integrations` README section (with Table of Contents entry) documenting the Claude Code, Codex, and OpenClaw install commands.
+
 ## v0.10.7 — 2026-07-27
 
 - Added a GitHub Actions CI status badge to the README.
