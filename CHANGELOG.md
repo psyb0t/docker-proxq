@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.6 — 2026-07-27
+
+- Fix badges CI job — add needs dependency so the coverage badge waits for the coverage artifact.
+
 ## v0.10.5 — 2026-07-27
 
 - Go 1.26; `make lint` now runs `go fix -diff ./...` first (fails with a fix hint before golangci-lint even runs) and `make lint-fix` applies `go fix` before the golangci-lint auto-fix pass.
