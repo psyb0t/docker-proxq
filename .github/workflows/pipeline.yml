@@ -5,21 +5,21 @@ name: pipeline
 # split for a reason that turned out not to hold: the mirror's trigger
 # (push to any branch or tag) is exactly what `on: push` already is.
 on:
+  # Every branch and every tag: the mirror needs to see all of them, and the
+  # jobs below carry their own ref guards.
   push:
-  release:
-    types: [published]
+  # Staggered per repository. The Wayback Machine is rate-limited and one save
+  # takes ~110s, so a shared cron would have every repo throttling the rest.
   schedule:
-    # Staggered per repository. The Wayback Machine is rate-limited and one save
-    # takes ~110s, so a shared cron would have every repo throttling the rest.
     - cron: "19 0 8 * *"
   workflow_dispatch:
 
 jobs:
   # `go` is the root of the needs-chain, so guarding it here is enough: badges,
-  # docker and publish-to-clawhub all hang off it and skip on their own for a
-  # schedule / release / dispatch run.
+  # docker and publish-to-clawhub all hang off it and skip on their own when the
+  # monthly archive cron wakes the workflow.
   go:
-    if: github.event_name == 'push'
+    if: github.event_name != 'schedule'
     uses: psyb0t/reusable-github-workflows/.github/workflows/go-workflow.yml@master
     with:
       go_version: "1.26"
