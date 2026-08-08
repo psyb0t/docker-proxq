@@ -58,7 +58,8 @@ Config path is resolved in this order: `--config` CLI flag → `PROXQ_CONFIG` en
 |---|---|
 | `--config <path>` | CLI flag, highest priority |
 | `PROXQ_CONFIG` | Path to the YAML config file, read if `--config` is unset |
-| `PUID` / `PGID` | Entrypoint runs the process as this uid:gid via `su-exec` (default `1000:1000`) — container-runtime detail, not app config |
+
+The published image runs the process as a fixed non-root user (`proxq`) baked into the image at build time — there is no `PUID`/`PGID` override.
 
 ## Config file reference (YAML)
 

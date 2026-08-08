@@ -447,6 +447,12 @@ proxq validates your config at startup and refuses to run if something's wrong:
 | `X-Proxq-Source` | `proxq` | Every response proxq generates: `202` accepted, `502` no match, `500` errors, `307` redirects, `404` from job endpoints, reverse proxy errors. **Never** on responses proxied from upstream. |
 | `X-Cache-Status` | `HIT` / `MISS` | On cached responses when caching is enabled. |
 
+### Accepted from the client
+
+| Header | Effect |
+|---|---|
+| `X-Proxq-Timeout` | Go duration string (e.g. `30s`). Overrides the matched upstream's `timeout` for that one submitted request. Invalid value → `400 Bad Request`. |
+
 ### Forwarded to upstream
 
 | Header | Description |

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.13 — 2026-08-08
+
+Documentation. No code change.
+
+- The env-var table documented `PUID` / `PGID` as switching the runtime user via
+  `su-exec`. The image does not do that: the Dockerfile creates `proxq` at build
+  time and sets `USER proxq`, with no `su-exec` anywhere. Anyone setting those
+  variables got silence, not a different uid.
+- Documented the `X-Proxq-Timeout` request header
+  (`HeaderNameXProxqTimeout` in `pkg/types/headers.go`), which overrides the
+  matched upstream's timeout for a single submitted request and answers `400`
+  on an unparseable value. It was implemented but undocumented.
+
 ## v0.10.12 — 2026-08-08
 
 Dependency bump only. No behaviour changed.
