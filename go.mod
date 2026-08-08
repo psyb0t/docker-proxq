@@ -9,7 +9,7 @@ require (
 	github.com/psyb0t/aichteeteapee v1.7.0
 	github.com/psyb0t/common-go v0.0.0-20260418092513-56e604e3f58c
 	github.com/psyb0t/ctxerrors v0.4.0
-	github.com/psyb0t/slogging v1.6.1
+	github.com/psyb0t/slogging v1.7.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.12 — 2026-08-08
+
+Dependency bump only. No behaviour changed.
+
+- `slogging` v1.6.1 → v1.7.0, which rebuilt its handler API. Nothing here needed editing: this uses the blank import, so it never names a handler type. The stdout/stderr split, the level and the format still come from the same environment variables. Vendor tree updated to match.
+
 ## v0.10.11 — 2026-08-08
 
 Dependency rename only. No behaviour changed.
