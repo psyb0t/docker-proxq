@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/psyb0t/docker-proxq/internal/app"
-	_ "github.com/psyb0t/slog-configurator"
+	_ "github.com/psyb0t/slogging/slogconf"
 )
 
 const defaultConfigPath = "config.yaml"

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.11 — 2026-08-08
+
+Dependency rename only. No behaviour changed.
+
+- `github.com/psyb0t/slog-configurator` became `github.com/psyb0t/slogging`, with the configurator now at `slogging/slogconf`. The blank import in `cmd/main.go` follows it, and the vendor tree moves with it. Logging is configured by exactly the same env vars as before.
+- The submit-a-job example in `.agents/skills/proxq/SKILL.md` now writes its auth header as `Bearer $UPSTREAM_TOKEN` rather than a literal placeholder, matching the `$PROXQ_URL` on the line above. Secret scanners read a credential-shaped literal in a curl header as a real finding regardless of the word chosen, and a copy-pasteable variable is the better example anyway.
+
 ## v0.10.10 — 2026-08-01
 
 CI plumbing only. No code in this repo changed — every commit in this release touches `.github/workflows/`.

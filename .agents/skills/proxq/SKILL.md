@@ -58,7 +58,7 @@ Any request that doesn't hit a job endpoint gets routed by longest-prefix match 
 ```bash
 curl -s -X POST "$PROXQ_URL/api/heavy-computation" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer upstream-token" \
+  -H "Authorization: Bearer $UPSTREAM_TOKEN" \
   -d '{"data": "lots of it"}'
 # 202 Accepted, X-Proxq-Source: proxq
 # {"jobId": "550e8400-e29b-41d4-a716-446655440000"}

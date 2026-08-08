@@ -921,15 +921,15 @@ github.com/psyb0t/aichteeteapee/serbewr/prawxxey
 github.com/psyb0t/common-go/cache
 github.com/psyb0t/common-go/errors
 github.com/psyb0t/common-go/slogging
-# github.com/psyb0t/ctxerrors v0.2.3
-## explicit; go 1.25
+# github.com/psyb0t/ctxerrors v0.4.0
+## explicit; go 1.26
 github.com/psyb0t/ctxerrors
 # github.com/psyb0t/gonfiguration v1.5.0
 ## explicit; go 1.25
 github.com/psyb0t/gonfiguration
-# github.com/psyb0t/slog-configurator v1.0.0
-## explicit; go 1.25
-github.com/psyb0t/slog-configurator
+# github.com/psyb0t/slogging v1.6.1
+## explicit; go 1.26
+github.com/psyb0t/slogging/slogconf
 # github.com/quasilyte/go-ruleguard v0.4.5
 ## explicit; go 1.22.0
 github.com/quasilyte/go-ruleguard/internal/goenv
