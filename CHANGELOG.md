@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.1 (2026-09-26)
+
+Security dependency update. v0.11.0 was tagged but its release build stopped at the vulnerability scan, so no v0.11.0 image or GitHub release exists. Use v0.11.1 for the `redis.username` support.
+
+- `golang.org/x/crypto` v0.54.0 to v0.57.0 (GO-2026-6354, GO-2026-6355).
+- `github.com/moby/go-archive` v0.2.0 to v0.3.3 (GO-2026-6253), through testcontainers-go v0.42.0 to v0.44.0.
+- Transitive updates pulled in by those bumps, including OpenTelemetry v1.44.0 and `golang.org/x/{sys,text,sync,mod,tools}`.
+
 ## v0.11.0 (2026-09-26)
 
 Adds Redis ACL user support.
