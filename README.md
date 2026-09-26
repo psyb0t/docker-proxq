@@ -121,6 +121,7 @@ Config file path is resolved in order: `--config` flag → `PROXQ_CONFIG` env va
 |---|---|---|---|
 | `listenAddress` | string | `127.0.0.1:8080` | HTTP server bind address |
 | `redis.addr` | string | `127.0.0.1:6379` | Redis server address |
+| `redis.username` | string | `""` | Redis ACL username. Empty uses the default user |
 | `redis.password` | string | `""` | Redis password |
 | `redis.db` | int | `0` | Redis database number |
 | `queue` | string | `default` | asynq queue name |

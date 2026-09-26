@@ -5,6 +5,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/psyb0t/ctxerrors"
+	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
@@ -14,8 +15,32 @@ type Redis struct {
 }
 
 func SetupRedis(ctx context.Context) (*Redis, error) {
+	return setupRedis(ctx)
+}
+
+// SetupRedisWithACL starts Redis with the default user disabled and one ACL
+// user limited to asynq's keys and channels plus the given cache key prefix.
+// Clients must authenticate with username and password.
+func SetupRedisWithACL(
+	ctx context.Context,
+	username, password, cacheKeyPrefix string,
+) (*Redis, error) {
+	return setupRedis(
+		ctx,
+		testcontainers.WithCmdArgs(
+			"--user", "default", "off",
+			"--user", username, "on", ">"+password,
+			"~asynq:*", "~"+cacheKeyPrefix+"*", "&asynq:*", "+@all",
+		),
+	)
+}
+
+func setupRedis(
+	ctx context.Context,
+	opts ...testcontainers.ContainerCustomizer,
+) (*Redis, error) {
 	container, err := tcredis.Run(
-		ctx, "redis:7-alpine",
+		ctx, "redis:7-alpine", opts...,
 	)
 	if err != nil {
 		return nil, ctxerrors.Wrap(

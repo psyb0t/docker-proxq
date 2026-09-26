@@ -69,6 +69,7 @@ The published image runs the process as a fixed non-root user (`proxq`) baked in
 |---|---|---|---|
 | `listenAddress` | string | `127.0.0.1:8080` | HTTP server bind address |
 | `redis.addr` | string | `127.0.0.1:6379` | Redis server address |
+| `redis.username` | string | `""` | Redis ACL username. Empty uses the default user |
 | `redis.password` | string | `""` | Redis password |
 | `redis.db` | int | `0` | Redis database number |
 | `queue` | string | `default` | asynq queue name |
@@ -132,6 +133,7 @@ listenAddress: "0.0.0.0:8080"
 
 redis:
   addr: "redis:6379"
+  username: ""
   password: ""
   db: 0
 

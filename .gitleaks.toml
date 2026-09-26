@@ -1,0 +1,21 @@
+title = "proxq secret scanning"
+
+[extend]
+useDefault = true
+
+# `gitleaks dir` scans the working tree and does not honour .gitignore, so the
+# ignored local paths are listed again here. Nothing below is tracked by Git.
+[[allowlists]]
+description = "Ignored local state and release tooling"
+paths = [
+  '''(^|/)\.env$''',
+  '''(^|/)\.research_files(?:/|$)''',
+  '''(^|/)\.testing(?:/|$)''',
+  '''(^|/)\.vscode(?:/|$)''',
+  '''(^|/)\.idea(?:/|$)''',
+  '''(^|/)CLAUDE\.md$''',
+  '''(^|/)git-update\.sh$''',
+  '''(^|/)post\.txt$''',
+  '''(^|/)coverage[^/]*$''',
+  '''\.(db|out|log|exe)$''',
+]

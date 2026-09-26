@@ -76,7 +76,10 @@ func (d *Duration) UnmarshalYAML(
 }
 
 type RedisConfig struct {
-	Addr     string `yaml:"addr"`
+	Addr string `yaml:"addr"`
+	// Username selects a Redis ACL user. Empty authenticates as the default
+	// user with Password alone.
+	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
 }

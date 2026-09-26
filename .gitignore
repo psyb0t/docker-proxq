@@ -12,3 +12,5 @@ __debug_*
 git-update.sh
 post.txt
 CLAUDE.md
+
+.testing/

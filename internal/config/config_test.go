@@ -39,6 +39,7 @@ upstreams:
 
 	assert.Equal(t, DefaultListenAddress, cfg.ListenAddress)
 	assert.Equal(t, DefaultRedisAddr, cfg.Redis.Addr)
+	assert.Equal(t, "", cfg.Redis.Username)
 	assert.Equal(t, "", cfg.Redis.Password)
 	assert.Equal(t, 0, cfg.Redis.DB)
 	assert.Equal(t, DefaultQueue, cfg.Queue)
@@ -82,6 +83,7 @@ func TestParse_FullConfig(t *testing.T) {
 listenAddress: "0.0.0.0:9090"
 redis:
   addr: "redis:6380"
+  username: "proxq"
   password: "secret"
   db: 3
 queue: "critical"
@@ -118,6 +120,7 @@ upstreams:
 
 	assert.Equal(t, "0.0.0.0:9090", cfg.ListenAddress)
 	assert.Equal(t, "redis:6380", cfg.Redis.Addr)
+	assert.Equal(t, "proxq", cfg.Redis.Username)
 	assert.Equal(t, "secret", cfg.Redis.Password)
 	assert.Equal(t, 3, cfg.Redis.DB)
 	assert.Equal(t, "critical", cfg.Queue)

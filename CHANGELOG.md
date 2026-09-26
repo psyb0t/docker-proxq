@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.11.0 (2026-09-26)
+
+Adds Redis ACL user support.
+
+- New `redis.username` config field. proxq sends it with `redis.password` for both the job queue and the `redis` cache mode, so proxq can run against a Redis server that disables the `default` user and gives proxq its own ACL user.
+- An empty or missing `redis.username` keeps the old behavior: password-only authentication as the `default` user. Existing configs need no change.
+- A least-privilege proxq user needs access to asynq's keys and channels (`~asynq:*` and `&asynq:*`) plus the cache key prefix (`~proxq:*` by default).
+- Integration tests run the production queue and cache setup against a real Redis with the `default` user disabled and a restricted ACL user, and check that a wrong password is rejected.
+
 ## v0.10.13 — 2026-08-08
 
 Documentation. No code change.

@@ -70,6 +70,7 @@ func setupCache( //nolint:ireturn
 		},
 		RedisClient: redis.NewClient(&redis.Options{
 			Addr:     cfg.Redis.Addr,
+			Username: cfg.Redis.Username,
 			Password: cfg.Redis.Password,
 			DB:       cfg.Redis.DB,
 		}),
@@ -90,6 +91,7 @@ func setupAsynq(
 ) (asynq.RedisClientOpt, *asynq.Client, *asynq.Inspector) {
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     cfg.Redis.Addr,
+		Username: cfg.Redis.Username,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	}
