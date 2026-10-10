@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.11.4 (2026-10-10)
+
+CI fix only. v0.11.3 was tagged but its checks failed before building, so no v0.11.3 image or GitHub release exists; this release publishes its Go 1.26.9 change.
+
+- The pipeline asks the Go workflow for Go 1.26.9 instead of "1.26". The workflow runs with `GOTOOLCHAIN=local`, so "1.26" picked the runner's cached Go 1.26.8, which refuses a `go.mod` that requires 1.26.9.
+
 ## v0.11.3 (2026-10-10)
 
 Builds with Go 1.26.9, which fixes standard library vulnerabilities the security scan reports as reachable. v0.11.2 was tagged but its build stopped at that scan, so no v0.11.2 image or GitHub release exists; this release also carries its README change.

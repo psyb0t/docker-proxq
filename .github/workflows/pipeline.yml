@@ -15,7 +15,9 @@ jobs:
   go:
     uses: psyb0t/reusable-github-workflows/.github/workflows/go-workflow.yml@master
     with:
-      go_version: "1.26"
+      # Exact patch: go.mod requires it and the workflow runs with
+      # GOTOOLCHAIN=local, so a looser "1.26" picks the runner's older cache.
+      go_version: "1.26.9"
       dep_command: "make dep"
       lint_command: "make lint"
       test_command: "make test-coverage"
