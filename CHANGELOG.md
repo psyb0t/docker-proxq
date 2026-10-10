@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.11.3 (2026-10-10)
+
+Builds with Go 1.26.9, which fixes standard library vulnerabilities the security scan reports as reachable. v0.11.2 was tagged but its build stopped at that scan, so no v0.11.2 image or GitHub release exists; this release also carries its README change.
+
+- `go.mod` moves to Go 1.26.9, which fixes HTTP/2 server crashes and resource exhaustion in `net/http`, unbounded header parsing in `mime/multipart`, malformed ECH handling in `crypto/tls`, and two `html/template` issues (GO-2026-6599, GO-2026-6600, GO-2026-6603, GO-2026-6605, GO-2026-6607 through GO-2026-6613, and GO-2026-6617).
+- The image builds on `golang:1.26.9-alpine` and runs on `alpine:3.24`, both pinned by digest. The runtime image was the floating `alpine:latest` before.
+
 ## v0.11.2 (2026-10-10)
 
 Documentation only. The README's agent integrations section names [peen](https://github.com/psyb0t/peen) as an example of an agent that reads `.agents/skills/`.
