@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.11.2 (2026-10-10)
+
+Documentation only. The README's agent integrations section names [peen](https://github.com/psyb0t/peen) as an example of an agent that reads `.agents/skills/`.
+
 ## v0.11.1 (2026-09-26)
 
 Security dependency update. v0.11.0 was tagged but its release build stopped at the vulnerability scan, so no v0.11.0 image or GitHub release exists. Use v0.11.1 for the `redis.username` support.

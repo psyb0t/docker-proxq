@@ -497,7 +497,7 @@ See [`pkg/clients/openai/README.md`](pkg/clients/openai/README.md) for the full 
 
 ## Agent integrations
 
-The [skill](.agents/skills/proxq) works in any agent that reads `.agents/skills/`, and
+The [skill](.agents/skills/proxq) works in any agent that reads `.agents/skills/` (such as [peen](https://github.com/psyb0t/peen)), and
 installs natively in the clients below.
 
 ### Claude Code
