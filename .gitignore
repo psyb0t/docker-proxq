@@ -14,3 +14,7 @@ post.txt
 CLAUDE.md
 
 .testing/
+.telemetry/
+
+# Review receipt for the local release script.
+git-update.sh.debot

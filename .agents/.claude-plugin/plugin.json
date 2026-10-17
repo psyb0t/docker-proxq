@@ -1,6 +1,6 @@
 {
   "name": "proxq",
-  "description": "Redis-backed async HTTP proxy queue built on asynq — submit any request, get a job ID back instantly, poll for status, and fetch the replayed upstream response.",
+  "description": "Redis-backed async HTTP proxy queue built on asynq: submit any request, get a job ID back instantly, poll for status, and fetch the replayed upstream response.",
   "author": { "name": "psyb0t", "url": "https://github.com/psyb0t" },
   "homepage": "https://github.com/psyb0t/docker-proxq",
   "license": "MIT",
