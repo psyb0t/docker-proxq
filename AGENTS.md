@@ -51,7 +51,7 @@ Data flow: client -> serbewr router (request ID, logger, recovery) -> `Handler.S
 | `.agents/` | the agent skill (`skills/proxq/`), the Claude and Codex plugin manifests, and these rules |
 | `.github/workflows/pipeline.yml` | CI: lint, tests, govulncheck, image build, tag promotion, release, ClawHub |
 
-`docs/` is the documentation site, published by GitHub Pages from `main` at https://psyb0t.github.io/docker-proxq/ (Jekyll with the just-the-docs theme). Every page needs front matter with a unique `title` and a `description` of 50 to 170 characters. Page-to-page links use the relative `.md` path; a link to a file outside `docs/` uses the full GitHub URL.
+`docs/` is the documentation site, published by GitHub Pages from `main` at https://psyb0t.github.io/docker-proxq/ (Jekyll with the just-the-docs theme).
 
 ## Commands
 
