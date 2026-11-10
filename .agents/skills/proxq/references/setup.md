@@ -52,14 +52,14 @@ Requires a reachable Redis instance (`redis:7-alpine` or any compatible server).
 
 ## Config resolution
 
-Config path is resolved in this order: `--config` CLI flag → `PROXQ_CONFIG` env var → `config.yaml` in the current directory. Everything else lives inside the YAML file itself — there is no per-field env var override for the rest of the settings, so mount/generate the YAML.
+Config path is resolved in this order: `--config` CLI flag → `PROXQ_CONFIG` env var → `config.yaml` in the current directory. Everything else lives inside the YAML file itself; there is no per-field env var override for the rest of the settings, so mount/generate the YAML.
 
 | Env var / flag | Purpose |
 |---|---|
 | `--config <path>` | CLI flag, highest priority |
 | `PROXQ_CONFIG` | Path to the YAML config file, read if `--config` is unset |
 
-The published image runs the process as a fixed non-root user (`proxq`) baked into the image at build time — there is no `PUID`/`PGID` override.
+The published image runs the process as a fixed non-root user (`proxq`) baked into the image at build time; there is no `PUID`/`PGID` override.
 
 ## Config file reference (YAML)
 
@@ -89,11 +89,11 @@ Routed by longest path-prefix match; the matched prefix is stripped before forwa
 | `url` | string | **required** | Upstream server URL. May include a path (e.g. `http://api:3000/v2`). |
 | `timeout` | duration | `5m` | Per-upstream request timeout (overridable per-request via `X-Proxq-Timeout`) |
 | `maxRetries` | int | `0` | Retry attempts on transport failure. `0` = no retries. |
-| `retryDelay` | duration | `0` | Fixed delay between retries. `0` = exponential backoff (`n^4` seconds: 1s, 16s, 81s, ~4m, ~10m for attempts 1-5). |
-| `maxBodySize` | int (bytes) | `10485760` (10 MB) | Max request body buffered into the queue |
-| `directProxyThreshold` | int (bytes) | `10485760` (10 MB) | Body size above which requests bypass the queue entirely. `0` disables (always queue regardless of size, up to `maxBodySize`). |
+| `retryDelay` | duration | `0` | Fixed delay between retries. `0` = exponential backoff (`n^4` seconds with `n` = retries already made: no wait, 1s, 16s, 81s, ~4m for retries 1-5). |
+| `maxBodySize` | int (bytes) | `10485760` (10 MB) | Max request body buffered into the queue. A longer queued body is silently cut to this size |
+| `directProxyThreshold` | int (bytes) | `10485760` (10 MB) | Body size above which requests bypass the queue entirely. `0` or unset means the 10 MB default; a negative value such as `-1` disables the check (always queue regardless of size, up to `maxBodySize`). |
 | `directProxyMode` | string | `proxy` | How bypassed requests reach upstream: `proxy` (reverse-proxied, client never sees upstream URL) or `redirect` (`307 Temporary Redirect` to the upstream URL) |
-| `cacheKeyExcludeHeaders` | list[string] | `[]` (defaults apply) | Headers excluded from the cache key. Empty list = built-in defaults (`X-Request-ID`, `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`). Setting this **replaces** the defaults entirely. |
+| `cacheKeyExcludeHeaders` | list[string] | `[]` (defaults apply) | Headers excluded from the cache key. Empty list = built-in defaults (`X-Request-ID`, `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`). Setting this **replaces** the defaults entirely. Names are matched exactly against Go's canonical header form (`X-Request-Id`, `X-Trace-Id`), so `X-Request-ID` and `X-Real-IP` in the defaults never match. |
 | `pathFilter.mode` | string | `blacklist` | `blacklist`: matching paths bypass the queue. `whitelist`: only matching paths get queued. |
 | `pathFilter.patterns` | list[string] | `[]` | Regex patterns matched against the request path. |
 
@@ -108,20 +108,20 @@ Routed by longest path-prefix match; the matched prefix is stripped before forwa
 
 Cache rules: any HTTP method can be cached (same body → cache hit, different body → miss); only 2xx upstream responses are cached; cache key = `sha256(method + url + headers + body)` with volatile headers excluded per `cacheKeyExcludeHeaders`. Responses carry `X-Cache-Status: HIT` or `MISS`.
 
-### Direct proxy bypass — checked in this order
+### Direct proxy bypass, checked in this order
 
 | Condition | Why |
 |---|---|
 | WebSocket (`Connection: upgrade` + `Upgrade: websocket`) | Persistent bidirectional, can't queue |
-| Path filter match (per-upstream `pathFilter`) | Explicit opt-out |
 | Chunked transfer (`Transfer-Encoding: chunked`) | Size unknown |
 | Body over `directProxyThreshold` | Avoid buffering huge uploads into Redis |
+| Path filter match (per-upstream `pathFilter`) | Explicit opt-out |
 
 ### Validation (fails startup if violated)
 
 - At least one upstream is required.
 - Every upstream needs both `prefix` and `url`.
-- Single upstream may use `prefix: "/"` (catch-all). Multiple upstreams may **not** include `prefix: "/"` — too ambiguous.
+- Single upstream may use `prefix: "/"` (catch-all). Multiple upstreams may **not** include `prefix: "/"`: too ambiguous.
 - No nested prefixes (`/api` and `/api/v2` together is an error).
 - No upstream prefix may conflict with `jobsPath` (e.g. an upstream at `/__jobs` when `jobsPath` is `/__jobs`).
 - All `pathFilter.patterns` must be valid regexes.
@@ -163,7 +163,7 @@ upstreams:
     url: "http://file-server:9000/storage"
     timeout: "10m"
     maxBodySize: 1073741824
-    directProxyThreshold: 0
+    directProxyThreshold: -1
     directProxyMode: "redirect"
 ```
 
@@ -173,7 +173,7 @@ Set by proxq on responses it generates itself (never on responses proxied verbat
 
 | Header | Value | When |
 |---|---|---|
-| `X-Proxq-Source` | `proxq` | `202` accepted, `502` no upstream match, `500` internal errors, `307` redirects, `404` from job endpoints, reverse-proxy errors |
+| `X-Proxq-Source` | `proxq` | `202` accepted, `400` bad `X-Proxq-Timeout`, `502` no upstream match, `500` errors on submit, `307` redirects, `404` from job endpoints, reverse-proxy errors. Not on the `200` or `500` answers of the status and cancel endpoints |
 | `X-Cache-Status` | `HIT` / `MISS` | On cached responses, when caching is enabled |
 
 Accepted from the client:
@@ -182,15 +182,15 @@ Accepted from the client:
 |---|---|
 | `X-Proxq-Timeout` | Go duration string (e.g. `30s`), overrides the matched upstream's `timeout` for that one submitted request. Invalid value → `400`. |
 
-Forwarded to upstream on every proxied/queued request: original headers as-is, plus `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`. Hop-by-hop headers (`Connection`, `Keep-Alive`, `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailers`, `Transfer-Encoding`, `Upgrade`) are stripped per RFC 7230.
+Forwarded to upstream on every queued request: original headers as-is, plus `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto`. Direct-proxied requests get none of these three from proxq. Hop-by-hop headers (`Connection`, `Keep-Alive`, `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailers`, `Transfer-Encoding`, `Upgrade`) are stripped per RFC 7230.
 
 ## No built-in auth
 
-proxq has no authentication of its own — no API key, bearer token, or allowlist on any endpoint (job submission, status, content, cancel). Put it behind:
+proxq has no authentication of its own: no API key, bearer token, or allowlist on any endpoint (job submission, status, content, cancel). Put it behind:
 - A reverse proxy doing auth (basic auth, OAuth2 proxy, mTLS) in front of `listenAddress`.
-- Network isolation — bind `listenAddress`/the published port to loopback or an internal-only network, never `0.0.0.0` on a publicly routable host without a fronting proxy.
+- Network isolation: bind `listenAddress`/the published port to loopback or an internal-only network, never `0.0.0.0` on a publicly routable host without a fronting proxy.
 
-Job IDs are UUIDv4 (unguessable in practice) but there is **no ownership check** — anyone who can reach the instance and knows/guesses a job ID can poll or cancel it.
+Job IDs are UUIDv4 (unguessable in practice) but there is **no ownership check**: anyone who can reach the instance and knows/guesses a job ID can poll or cancel it.
 
 ## Management / development (operator-side, from the repo)
 
@@ -201,6 +201,6 @@ make test           # unit + integration tests (race detector on)
 make test-coverage  # tests with 90% coverage threshold
 make build           # docker build
 
-# e2e tests — spins up Redis + upstream + proxq via testcontainers
+# e2e tests: spins up Redis + upstream + proxq via testcontainers
 cd tests && go test -v -timeout 10m ./...
 ```

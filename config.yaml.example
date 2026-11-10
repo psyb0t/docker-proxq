@@ -43,4 +43,4 @@ upstreams:
     url: "http://file-server:8080/storage"
     timeout: "10m"
     maxBodySize: 1073741824
-    directProxyThreshold: 0    # always queue
+    directProxyThreshold: -1   # negative turns the size check off (0 means the 10 MiB default)

@@ -11,7 +11,9 @@ __debug_*
 .research_files
 git-update.sh
 post.txt
-CLAUDE.md
+*.local.json
+# Agent notes shipped inside vendored modules; never committed.
+vendor/**/CLAUDE.md
 
 .testing/
 .telemetry/

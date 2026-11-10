@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.5 (2026-11-10)
+
+- The documentation is published at https://psyb0t.github.io/docker-proxq/, and the reference material from the README and the OpenAI client README moved there.
+- Every branch push runs lint, the tests with the coverage gate, and govulncheck. A version tag promotes the image already built for that main commit instead of rebuilding it, and the skill goes to ClawHub only after the GitHub release exists. Every make target runs Go in a pinned container, including the new `make sec`, so the host needs only Docker, Make and Bash.
+- The file-server upstream in `config.yaml.example` sets `directProxyThreshold: -1`, which queues every body. The old `0` fell back to the 10 MiB default instead of the "always queue" its comment promised. The agent skill's configuration reference had the same mistake and is corrected.
+- The image builds on Go 1.26.10, and the `github.com/klauspost/compress` test dependency moves to v1.20.2.
+- Buy Me a Coffee is in the funding links, and `AGENTS.md` plus project rules in `.agents/rules/` are committed for coding agents.
+
 ## v0.11.4 (2026-10-10)
 
 CI fix only. v0.11.3 was tagged but its checks failed before building, so no v0.11.3 image or GitHub release exists; this release publishes its Go 1.26.9 change.

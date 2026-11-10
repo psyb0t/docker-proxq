@@ -6,28 +6,28 @@ user-invocable: true
 metadata:
   { "openclaw": { "emoji": "🦡", "primaryEnv": "PROXQ_URL", "requires": { "bins": ["curl", "docker"] } } }
 permissions:
-  network: "outbound HTTP to the configured PROXQ_URL (submit/poll/cancel job calls) — AND proxq itself makes arbitrary outbound HTTP requests to whatever upstream/URL you submit through it, on your behalf. That's an SSRF surface: only submit requests you intend proxq's configured upstreams to receive."
-  shell: "curl + docker/docker-compose invocations shown in setup.md and this file (container lifecycle, request examples) — no other host access"
+  network: "outbound HTTP to the configured PROXQ_URL (submit/poll/cancel job calls), AND proxq itself makes arbitrary outbound HTTP requests to whatever upstream/URL you submit through it, on your behalf. That's an SSRF surface: only submit requests you intend proxq's configured upstreams to receive."
+  shell: "curl + docker/docker-compose invocations shown in setup.md and this file (container lifecycle, request examples); no other host access"
 ---
 
 # proxq
 
-The honey badger of HTTP proxies. POST a request, get a job ID back instantly, come back later for the goods. "I'll get back to you" as a service — every HTTP request becomes an async job in a Redis-backed queue (via [asynq](https://github.com/hibiken/asynq)).
+The honey badger of HTTP proxies. POST a request, get a job ID back instantly, come back later for the goods. "I'll get back to you" as a service: every HTTP request becomes an async job in a Redis-backed queue (via [asynq](https://github.com/hibiken/asynq)).
 
 For installation, configuration, and container setup, see [references/setup.md](references/setup.md).
 
 ## Security & safety
 
-- **This is an SSRF surface by design.** proxq's whole job is to make outbound HTTP requests to an upstream on your behalf — that's not a bug, it's the feature. Anyone who can submit a job through proxq gets proxq's network position to reach whatever `upstreams[].url` is configured (and, via `directProxyMode`/prefix stripping, whatever path/query you tack onto it). Never point an upstream at internal/admin services you wouldn't otherwise expose, and never let untrusted callers choose the upstream prefix or URL.
-- **No built-in authentication or authorization.** proxq ships with zero auth — no API key, no bearer token, no allowlist. Anyone who can reach `PROXQ_URL` can submit jobs, poll any job ID, and cancel any job ID (job IDs are UUIDv4 but there is no ownership check). Front it with a reverse proxy doing auth (basic auth, mTLS, an API gateway) or bind it to loopback/an internal network only — do not expose a bare proxq instance to the open internet.
-- **Trusted upstreams only.** Configure `upstreams[].url` to point only at backends you control or explicitly trust. proxq forwards the full original request (method, headers, body) plus `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto` — treat the upstream config the same way you'd treat a reverse-proxy target list.
-- **Consumer-only.** This skill talks to an instance you (or your operator) already run and trust. It never provisions, hardens, or reconfigures the server — that's covered in setup.md as an explicit operator step.
-- **Cancelling a job** — `DELETE /__jobs/{id}` best-effort stops an in-flight job and deletes its record (no undo). Per the no-auth point above there's no ownership check, so only cancel a job you submitted or one the user explicitly named — don't guess IDs or bulk-cancel.
+- **This is an SSRF surface by design.** proxq's whole job is to make outbound HTTP requests to an upstream on your behalf. That's not a bug, it's the feature. Anyone who can submit a job through proxq gets proxq's network position to reach whatever `upstreams[].url` is configured (and, via `directProxyMode`/prefix stripping, whatever path/query you tack onto it). Never point an upstream at internal/admin services you wouldn't otherwise expose, and never let untrusted callers choose the upstream prefix or URL.
+- **No built-in authentication or authorization.** proxq ships with zero auth: no API key, no bearer token, no allowlist. Anyone who can reach `PROXQ_URL` can submit jobs, poll any job ID, and cancel any job ID (job IDs are UUIDv4 but there is no ownership check). Front it with a reverse proxy doing auth (basic auth, mTLS, an API gateway) or bind it to loopback/an internal network only. Do not expose a bare proxq instance to the open internet.
+- **Trusted upstreams only.** Configure `upstreams[].url` to point only at backends you control or explicitly trust. proxq forwards the full original request (method, headers, body) plus `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto`, so treat the upstream config the same way you'd treat a reverse-proxy target list.
+- **Consumer-only.** This skill talks to an instance you (or your operator) already run and trust. It never provisions, hardens, or reconfigures the server; that's covered in setup.md as an explicit operator step.
+- **Cancelling a job.** `DELETE /__jobs/{id}` best-effort stops an in-flight job and deletes its record (no undo). Per the no-auth point above there's no ownership check, so only cancel a job you submitted or one the user explicitly named. Don't guess IDs or bulk-cancel.
 
 ## When To Use
 
 - Put an async facade in front of a slow backend so callers get an instant response instead of hanging on a long-running request.
-- Decouple a client from an upstream that occasionally times out — proxq queues the request, retries transport failures automatically, and the client polls at its own pace.
+- Decouple a client from an upstream that occasionally times out: proxq queues the request, retries transport failures automatically, and the client polls at its own pace.
 - Sit behind a CDN/reverse-proxy with a short request timeout while your real backend takes minutes.
 - Relay webhooks without blocking the sender, with configurable retry/backoff.
 - Queue large uploads or long-running processing jobs (video, exports, reports) so the client doesn't hold a connection open.
@@ -36,10 +36,10 @@ For installation, configuration, and container setup, see [references/setup.md](
 
 ## When NOT To Use
 
-- True real-time / streaming responses — the whole model is submit-then-poll; there's no push/webhook-back-to-caller notification built in.
-- WebSocket or chunked-transfer traffic that needs the queue semantics — those bypass the queue automatically and just get reverse-proxied straight through (see `directProxyMode` in setup.md), so don't expect a job ID for them.
-- As a public-facing endpoint without your own auth layer in front — proxq has none.
-- Pointing an upstream at anything you don't fully trust — proxq will happily forward arbitrary methods/bodies/headers to it.
+- True real-time / streaming responses: the whole model is submit-then-poll; there's no push/webhook-back-to-caller notification built in.
+- WebSocket or chunked-transfer traffic that needs the queue semantics: those bypass the queue automatically and just get reverse-proxied straight through (see `directProxyMode` in setup.md), so don't expect a job ID for them.
+- As a public-facing endpoint without your own auth layer in front. proxq has none.
+- Pointing an upstream at anything you don't fully trust: proxq will happily forward arbitrary methods/bodies/headers to it.
 
 ## Usage
 
@@ -49,11 +49,11 @@ Point at a running instance:
 export PROXQ_URL=http://localhost:8080
 ```
 
-All job-management endpoints live under `jobsPath` (default `/__jobs`). Every response proxq itself generates (not proxied from upstream) carries `X-Proxq-Source: proxq` — that's how you distinguish a proxq-origin response (job not ready, no upstream match, proxq error) from a real upstream response replayed verbatim.
+All job-management endpoints live under `jobsPath` (default `/__jobs`). Every response proxq itself generates (not proxied from upstream) carries `X-Proxq-Source: proxq`, except the `200` answers from the status and cancel endpoints and the `500` answers those endpoints give when Redis fails. That's how you distinguish a proxq-origin response (job not ready, no upstream match, proxq error) from a real upstream response replayed verbatim.
 
 ### Submit a job
 
-Any request that doesn't hit a job endpoint gets routed by longest-prefix match to a configured upstream and queued (unless it qualifies for [direct-proxy bypass](#direct-proxy-bypass) — see setup.md).
+Any request that doesn't hit a job endpoint gets routed by longest-prefix match to a configured upstream and queued (unless it qualifies for direct-proxy bypass, see setup.md).
 
 ```bash
 curl -s -X POST "$PROXQ_URL/api/heavy-computation" \
@@ -84,11 +84,11 @@ Failed job includes `error`:
 {"id": "550e8400-...", "status": "failed", "error": "forward request: dial tcp: connection refused"}
 ```
 
-`status` is one of `queued` (pending/scheduled/aggregating), `running` (active, or waiting on a retry), `completed` (done — response stored, even if upstream returned 4xx/5xx), `failed` (transport broke and retries are exhausted). Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`, body `{"code":"NOT_FOUND","message":"Not found"}`.
+`status` is one of `queued` (pending/scheduled/aggregating), `running` (active, or waiting on a retry), `completed` (done, response stored, even if upstream returned 4xx/5xx), `failed` (transport broke and retries are exhausted). Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`, body `{"code":"NOT_FOUND","message":"Not found"}`.
 
 ### Fetch job content (the payoff)
 
-Replays the upstream response exactly — status code, headers, body — as if you'd called upstream directly.
+Replays the upstream response exactly (status code, headers, body) as if you'd called upstream directly.
 
 ```bash
 curl -si "$PROXQ_URL/__jobs/550e8400-e29b-41d4-a716-446655440000/content"
@@ -102,7 +102,7 @@ X-Custom-Header: from-upstream
 {"result": "done"}
 ```
 
-If upstream returned a 404, you get 404 back too — but **without** `X-Proxq-Source` (it's a real upstream response). If the job isn't done yet, or doesn't exist: `404 Not Found` **with** `X-Proxq-Source: proxq`. That header is the whole disambiguation trick — present means "proxq talking", absent means "upstream talking".
+If upstream returned a 404, you get 404 back too, but **without** `X-Proxq-Source` (it's a real upstream response). If the job isn't done yet, or doesn't exist: `404 Not Found` **with** `X-Proxq-Source: proxq`. That header is the whole disambiguation trick: present means "proxq talking", absent means "upstream talking".
 
 ### Cancel a job
 
@@ -111,7 +111,7 @@ curl -s -X DELETE "$PROXQ_URL/__jobs/550e8400-e29b-41d4-a716-446655440000"
 # {"status": "cancelled"}
 ```
 
-Best-effort: attempts to stop in-flight processing, then deletes the task record. Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`. (See [Security & safety](#security--safety) — no ownership check, so only cancel jobs you own.)
+Best-effort: attempts to stop in-flight processing, then deletes the task record. A job that is still `running` may return `500` because asynq cannot delete a job a worker holds; check the status and retry the DELETE once it is no longer running. Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`. (See [Security & safety](#security--safety): no ownership check, so only cancel jobs you own.)
 
 ### Poll loop example
 
