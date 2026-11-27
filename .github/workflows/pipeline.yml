@@ -106,6 +106,5 @@ jobs:
     with:
       skill_names: '["proxq"]'
       plugin_names: "[]"
-      pin_images: '["psyb0t/proxq"]'
     secrets:
       clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

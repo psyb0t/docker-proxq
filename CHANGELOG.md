@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.11.7 (2026-11-27)
+
+- The agent skill now covers only using a proxq that is already running: submitting a request, polling the job, fetching the content and cancelling a job the agent submitted. Install steps, Docker images and config tables are out of the skill and stay in the [documentation](https://psyb0t.github.io/docker-proxq/). `references/setup.md` is removed.
+- The ClawHub publish job no longer sets `pin_images`, so publishing no longer rewrites the skill's image references to the release.
+- Rules AGT1 and CFG3 no longer refer to the skill's setup reference. AGT1 says the skill covers use of the running tool and links the docs for setup.
+
 ## v0.11.6 (2026-11-27)
 
 - The image and `make` targets build on Go 1.26.11, and the OpenTelemetry modules move to v1.47.0 along with the `testify`, `logr` and `yaml` modules they require. This clears the reachable `net/http` and `otel/trace` vulnerabilities (GO-2026-6859 and GO-2026-6974) that `make sec` reported.
