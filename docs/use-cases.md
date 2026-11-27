@@ -1,7 +1,6 @@
 ---
 title: "Use cases"
 description: "Example proxq configs: slow APIs behind short proxy timeouts, webhook relays, mixed sync and async APIs, media processing, multi-service gateways."
-nav_order: 7
 ---
 
 # Use cases

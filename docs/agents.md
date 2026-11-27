@@ -1,7 +1,6 @@
 ---
 title: "Agent integrations"
 description: "Install the proxq skill in Claude Code, Codex or OpenClaw so an agent can submit requests to a running proxq, poll jobs and read results."
-nav_order: 8
 ---
 
 # Agent integrations

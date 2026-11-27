@@ -1,7 +1,6 @@
 ---
 title: "Jobs API"
 description: "Submit a request to proxq, read the job status, replay the stored upstream response, cancel a job, and tell proxq answers from upstream ones."
-nav_order: 3
 ---
 
 # Jobs API

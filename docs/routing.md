@@ -1,7 +1,6 @@
 ---
 title: "Routing and bypass"
 description: "How proxq picks an upstream by path prefix, strips the prefix, and which requests skip the queue for a direct proxy or a 307 redirect."
-nav_order: 4
 ---
 
 # Routing and bypass

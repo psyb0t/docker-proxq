@@ -1,0 +1,16 @@
+# proxq
+
+> proxq queues HTTP requests in Redis, answers with a job ID right away, forwards them to your upstream in the background, and replays the stored response.
+
+- [proxq](https://psyb0t.github.io/docker-proxq/): proxq is an async HTTP proxy: every request becomes a Redis-backed job, you get a job ID at once and fetch the upstream response later.
+- [Configuration](https://psyb0t.github.io/docker-proxq/configuration/): Every proxq config field with its default: listen address, Redis, queue, workers, jobs path, retention, cache, upstreams and logging.
+- [Jobs API](https://psyb0t.github.io/docker-proxq/api/): Submit a request to proxq, read the job status, replay the stored upstream response, cancel a job, and tell proxq answers from upstream ones.
+- [Routing and bypass](https://psyb0t.github.io/docker-proxq/routing/): How proxq picks an upstream by path prefix, strips the prefix, and which requests skip the queue for a direct proxy or a 307 redirect.
+- [Caching](https://psyb0t.github.io/docker-proxq/caching/): proxq response caching: memory or Redis mode, TTL, which responses are stored, how the cache key is built, and the X-Cache-Status header.
+- [OpenAI Go client](https://psyb0t.github.io/docker-proxq/openai-client/): A drop-in openai-go client that sends every SDK call through proxq: enqueue, poll and return the upstream response as a normal SDK result.
+- [Use cases](https://psyb0t.github.io/docker-proxq/use-cases/): Example proxq configs: slow APIs behind short proxy timeouts, webhook relays, mixed sync and async APIs, media processing, multi-service gateways.
+- [Agent integrations](https://psyb0t.github.io/docker-proxq/agents/): Install the proxq skill in Claude Code, Codex or OpenClaw so an agent can submit requests to a running proxq, poll jobs and read results.
+- [Security](https://psyb0t.github.io/docker-proxq/security/): What a proxq instance exposes: no built-in auth, outbound requests on the caller's behalf, unowned job IDs, trusted forwarded headers, and what to put in front.
+- [Troubleshooting](https://psyb0t.github.io/docker-proxq/troubleshooting/): proxq startup errors with their exact messages and fixes, plus runtime problems: 500 on submit, 502, jobs stuck queued, cache misses.
+- [Architecture](https://psyb0t.github.io/docker-proxq/architecture/): proxq internals: one Go process with an HTTP server and an asynq worker on one Redis, the request path, job lifecycle and shutdown.
+- [Development](https://psyb0t.github.io/docker-proxq/development/): Build, lint and test proxq from source with Make and Docker, run the end-to-end suite, build these docs, and how the CI pipeline releases.

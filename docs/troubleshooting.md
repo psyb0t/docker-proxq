@@ -1,7 +1,6 @@
 ---
 title: "Troubleshooting"
 description: "proxq startup errors with their exact messages and fixes, plus runtime problems: 500 on submit, 502, jobs stuck queued, cache misses."
-nav_order: 10
 ---
 
 # Troubleshooting

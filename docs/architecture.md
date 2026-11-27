@@ -1,7 +1,6 @@
 ---
 title: "Architecture"
 description: "proxq internals: one Go process with an HTTP server and an asynq worker on one Redis, the request path, job lifecycle and shutdown."
-nav_order: 11
 ---
 
 # Architecture

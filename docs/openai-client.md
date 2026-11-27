@@ -1,7 +1,6 @@
 ---
 title: "OpenAI Go client"
 description: "A drop-in openai-go client that sends every SDK call through proxq: enqueue, poll and return the upstream response as a normal SDK result."
-nav_order: 6
 ---
 
 # OpenAI Go client

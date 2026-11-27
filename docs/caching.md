@@ -1,7 +1,6 @@
 ---
 title: "Caching"
 description: "proxq response caching: memory or Redis mode, TTL, which responses are stored, how the cache key is built, and the X-Cache-Status header."
-nav_order: 5
 ---
 
 # Caching

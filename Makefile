@@ -9,7 +9,7 @@ SHELL := /bin/bash
 # Bash. It is the Debian variant of the Dockerfile's builder Go version,
 # because -race needs cgo and a C compiler. Pinned by digest; bump it together
 # with the Dockerfile.
-GO_IMAGE := golang:1.26.10-trixie@sha256:fd9a91f0ece5664556f4851d06dce5e5b505a71166dffd385a03ba9d200b6983
+GO_IMAGE := golang:1.26.11-trixie@sha256:f9e99477a80ccd7adfb69780510b22c7249ce9169885f18aa762cd886e75e018
 
 # Build and module caches live in the gitignored .testing/ directory so
 # repeated runs stay fast without writing outside the checkout.
@@ -43,9 +43,16 @@ GO_RUN_DIND = $(GO_RUN_BASE) \
 
 GOVULNCHECK_VERSION := v1.3.0
 
-DOCS_SITE ?= .testing/docs-site
+UID := $(shell id -u)
+GID := $(shell id -g)
+DOCS_NODE_IMAGE := node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
+DOCS_CACHE := .testing/docs-cache
+DOCS_RUN := docker run --rm --init --cap-drop ALL --security-opt no-new-privileges:true \
+	--user $(UID):$(GID) -e HOME=/tmp -e COREPACK_HOME=/cache/corepack \
+	-v "$(CURDIR)/$(DOCS_CACHE):/cache" \
+	-v "$(CURDIR)/docs:/work/docs:ro" -v "$(CURDIR)/website:/work/website" -w /work/website
 
-.PHONY: all build build-test dep lint lint-fix test test-coverage sec docs clean help go-cache
+.PHONY: all build build-test dep lint lint-fix test test-coverage sec clean help go-cache
 
 all: dep lint test ## Run dep, lint and test
 
@@ -99,20 +106,18 @@ sec: go-cache ## Scan dependencies and the standard library with govulncheck
 	@echo "Running govulncheck..."
 	@$(GO_RUN) go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-# Builds docs/ with the image GitHub Pages uses, so the local result matches
-# the published site. The output directory is gitignored.
-docs: ## Build the documentation site into .testing/docs-site
-	@mkdir -p "$(DOCS_SITE)"
-	@docker run --rm \
-		--user "$$(id -u):$$(id -g)" \
-		-e HOME=/tmp \
-		-e GITHUB_WORKSPACE=/work \
-		-e GITHUB_REPOSITORY=psyb0t/docker-proxq \
-		-e INPUT_SOURCE=docs \
-		-e INPUT_DESTINATION="$(DOCS_SITE)" \
-		-e INPUT_VERBOSE=false \
-		-v "$(CURDIR):/work" \
-		ghcr.io/actions/jekyll-build-pages:v1.0.13@sha256:6791ebfd912185ed59bfb5fb102664fa872496b79f87ff8b9cfba292a7345041
+.PHONY: docs docs-build docs-lock
+docs: docs-build ## Build the documentation site into website/build, with the link check
+
+docs-build: | $(DOCS_CACHE)
+	$(DOCS_RUN) $(DOCS_NODE_IMAGE) corepack pnpm install --frozen-lockfile --ignore-scripts --store-dir /cache/pnpm
+	$(DOCS_RUN) --network none $(DOCS_NODE_IMAGE) corepack pnpm run build
+
+docs-lock: | $(DOCS_CACHE) ## Refresh website/pnpm-lock.yaml under the dependency age gate
+	$(DOCS_RUN) $(DOCS_NODE_IMAGE) corepack pnpm install --lockfile-only --ignore-scripts --store-dir /cache/pnpm
+
+$(DOCS_CACHE):
+	mkdir -p "$@"
 
 build: ## Build the Docker image
 	docker build -t $(IMAGE_NAME):$(TAG) .

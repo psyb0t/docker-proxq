@@ -1,7 +1,6 @@
 ---
 title: "Development"
 description: "Build, lint and test proxq from source with Make and Docker, run the end-to-end suite, build these docs, and how the CI pipeline releases."
-nav_order: 12
 ---
 
 # Development
@@ -17,7 +16,7 @@ make test-coverage   # tests with the 90% coverage gate
 make sec             # govulncheck
 make dep             # go mod tidy and go mod vendor
 make build           # docker build -t psyb0t/proxq:latest .
-make docs            # build this documentation site into .testing/docs-site
+make docs            # build this documentation site into website/build
 ```
 
 Dependencies are vendored in `vendor/`. After changing imports, run `make dep` and commit `go.mod`, `go.sum` and `vendor/` together. New imports also need an entry in the `depguard` allow list in [`.golangci.yml`](https://github.com/psyb0t/docker-proxq/blob/main/.golangci.yml).
@@ -54,7 +53,7 @@ Some of these tests still call an older signature of the `setup` helper in `test
 
 ## Documentation
 
-This site is the `docs/` directory, built by GitHub Pages with Jekyll and the just-the-docs theme. `make docs` builds it with the same image GitHub uses. Every page needs front matter with a unique `title` and a `description` of 50 to 170 characters. Link to other pages with their relative `.md` path, and to repository files outside `docs/` with the full GitHub URL.
+This site is the `docs/` directory, built with Docusaurus from the `website/` directory. `make docs` builds it in a pinned Node container and fails on a broken link or heading anchor. After adding or removing a page, update `website/sidebars.mjs` and `website/static/llms.txt`. `make docs-lock` refreshes `website/pnpm-lock.yaml`, and the install refuses packages published in the last seven days. Every page needs front matter with a unique `title` and a `description` of 50 to 170 characters. Link to other pages with their relative `.md` path, and to repository files outside `docs/` with the full GitHub URL.
 
 ## CI
 
@@ -63,7 +62,7 @@ This site is the `docs/` directory, built by GitHub Pages with Jekyll and the ju
 | Job | Runs on | Does |
 | --- | --- | --- |
 | `code` | every branch push | `make lint`, `make test-coverage`, `make sec` |
-| `call-docker-image-workflow` | after `code` | On `main`: builds `linux/amd64` and `linux/arm64`, pushes `psyb0t/proxq:latest` and `:sha-<commit>`, scans with Grype |
+| `docker` | after `code` | On `main`: builds `linux/amd64` and `linux/arm64`, pushes `psyb0t/proxq:latest` and `:sha-<commit>`, scans with Grype |
 | `badges` | `main` and tags | Coverage, version and license badges |
 | `wait` | `v*` tags | Waits for the `main` run of the tagged commit to succeed |
 | `docker-promote` | after `wait` | Points the release tag at the `:sha-<commit>` image, no rebuild |

@@ -1,13 +1,14 @@
 ---
 name: proxq
-description: Go, Redis-backed async HTTP proxy queue (built on asynq). POST any HTTP request (any method, any path, any body) to a configured upstream, get a job ID back instantly (202), a worker forwards it later, you poll GET /__jobs/{id} for status (queued/running/completed/failed) and GET /__jobs/{id}/content for the replayed upstream response (status/headers/body). DELETE /__jobs/{id} cancels. Path-prefix routing to multiple upstreams, per-upstream timeout/retries/pathFilter, optional response caching (memory or Redis LRU), automatic direct-proxy bypass for WebSocket/chunked/large-body requests. No built-in auth. Use when the user wants to turn a slow/unreliable backend into a fire-and-forget async API, decouple a client from upstream latency, relay webhooks with retries, or queue heavy uploads/processing jobs behind short-timeout reverse proxies.
+description: Go, Redis-backed async HTTP proxy queue (built on asynq). POST any HTTP request (any method, any path, any body) to a configured upstream, get a job ID back instantly (202), a worker forwards it later, you poll GET /__jobs/{id} for status (queued/running/completed/failed) and GET /__jobs/{id}/content for the replayed upstream response (status/headers/body). Cancelling a job is a DELETE on its job URL. Path-prefix routing to multiple upstreams, per-upstream timeout/retries/pathFilter, optional response caching (memory or Redis LRU), automatic direct-proxy bypass for WebSocket/chunked/large-body requests. No built-in auth. Use when the user wants to turn a slow/unreliable backend into a fire-and-forget async API, decouple a client from upstream latency, relay webhooks with retries, or queue heavy uploads/processing jobs behind short-timeout reverse proxies.
 homepage: https://github.com/psyb0t/docker-proxq
 user-invocable: true
 metadata:
   { "openclaw": { "emoji": "🦡", "primaryEnv": "PROXQ_URL", "requires": { "bins": ["curl", "docker"] } } }
 permissions:
-  network: "outbound HTTP to the configured PROXQ_URL (submit/poll/cancel job calls), AND proxq itself makes arbitrary outbound HTTP requests to whatever upstream/URL you submit through it, on your behalf. That's an SSRF surface: only submit requests you intend proxq's configured upstreams to receive."
-  shell: "curl + docker/docker-compose invocations shown in setup.md and this file (container lifecycle, request examples); no other host access"
+  network: "outbound HTTP to the PROXQ_URL instance you run (submit, poll and cancel job calls). That instance forwards each submitted request, with its headers and body, to the upstreams in its own config, so only submit requests you intend those upstreams to receive. Docker pulls the psyb0t/proxq and redis images from Docker Hub during setup."
+  shell: "curl for the job API calls in this file, and docker or docker compose to start the proxq and Redis containers described in references/setup.md. No other commands."
+  filesystem: "write a proxq config.yaml and a compose file in a directory the user names, only during setup"
 ---
 
 # proxq
@@ -22,7 +23,7 @@ For installation, configuration, and container setup, see [references/setup.md](
 - **No built-in authentication or authorization.** proxq ships with zero auth: no API key, no bearer token, no allowlist. Anyone who can reach `PROXQ_URL` can submit jobs, poll any job ID, and cancel any job ID (job IDs are UUIDv4 but there is no ownership check). Front it with a reverse proxy doing auth (basic auth, mTLS, an API gateway) or bind it to loopback/an internal network only. Do not expose a bare proxq instance to the open internet.
 - **Trusted upstreams only.** Configure `upstreams[].url` to point only at backends you control or explicitly trust. proxq forwards the full original request (method, headers, body) plus `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto`, so treat the upstream config the same way you'd treat a reverse-proxy target list.
 - **Consumer-only.** This skill talks to an instance you (or your operator) already run and trust. It never provisions, hardens, or reconfigures the server; that's covered in setup.md as an explicit operator step.
-- **Cancelling a job.** `DELETE /__jobs/{id}` best-effort stops an in-flight job and deletes its record (no undo). Per the no-auth point above there's no ownership check, so only cancel a job you submitted or one the user explicitly named. Don't guess IDs or bulk-cancel.
+- **Cancelling a job.** `DELETE /__jobs/{id}` best-effort stops an in-flight job and deletes its record (no undo). There is no ownership check, so only cancel a job you submitted or one the user explicitly named when they asked for the cancel. Don't guess IDs or bulk-cancel.
 
 ## When To Use
 
@@ -111,7 +112,7 @@ curl -s -X DELETE "$PROXQ_URL/__jobs/550e8400-e29b-41d4-a716-446655440000"
 # {"status": "cancelled"}
 ```
 
-Best-effort: attempts to stop in-flight processing, then deletes the task record. A job that is still `running` may return `500` because asynq cannot delete a job a worker holds; check the status and retry the DELETE once it is no longer running. Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`. (See [Security & safety](#security--safety): no ownership check, so only cancel jobs you own.)
+Best-effort: attempts to stop in-flight processing, then deletes the task record. A job that is still `running` may return `500` because asynq cannot delete a job a worker holds; check the status and retry the DELETE once it is no longer running. Unknown job ID → `404 Not Found`, `X-Proxq-Source: proxq`.
 
 ### Poll loop example
 

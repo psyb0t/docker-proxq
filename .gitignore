@@ -20,3 +20,8 @@ vendor/**/CLAUDE.md
 
 # Review receipt for the local release script.
 git-update.sh.debot
+
+# Documentation site build output
+/website/node_modules/
+/website/.docusaurus/
+/website/build/

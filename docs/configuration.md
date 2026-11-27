@@ -1,7 +1,6 @@
 ---
 title: "Configuration"
 description: "Every proxq config field with its default: listen address, Redis, queue, workers, jobs path, retention, cache, upstreams and logging."
-nav_order: 2
 ---
 
 # Configuration

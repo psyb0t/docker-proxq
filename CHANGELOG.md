@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.11.6 (2026-11-27)
+
+- The image and `make` targets build on Go 1.26.11, and the OpenTelemetry modules move to v1.47.0 along with the `testify`, `logr` and `yaml` modules they require. This clears the reachable `net/http` and `otel/trace` vulnerabilities (GO-2026-6859 and GO-2026-6974) that `make sec` reported.
+- The agent skill published to ClawHub, the agent skill registry, names the exact `psyb0t/proxq` image of the release, by tag and digest, and the Redis image in its setup example is `redis:7.4.2-alpine` instead of the moving `redis:7-alpine`.
+- The skill's permissions now list what it runs, the Docker images it pulls and the files it writes during setup. It cancels a job only when the user asked for that cancel, and its setup page points to `AGENTS.md` for the build and test commands instead of listing them.
+- The documentation site is generated with Docusaurus instead of Jekyll, both static site generators. `make docs` builds it in a pinned Node container and fails on a broken link or heading anchor, and a new workflow deploys it to GitHub Pages.
+- The pipeline names its image job `docker`, and both image jobs state that the Docker Hub repository stays public and that its description is synced from GitHub.
+- `.agents/rules/` keeps only rules that are specific to this project.
+
 ## v0.11.5 (2026-11-10)
 
 - The documentation is published at https://psyb0t.github.io/docker-proxq/, and the reference material from the README and the OpenAI client README moved there.

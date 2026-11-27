@@ -17,7 +17,7 @@ services:
       - redis
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.2-alpine
     restart: unless-stopped
 
 configs:
@@ -48,7 +48,7 @@ docker run -d \
   psyb0t/proxq
 ```
 
-Requires a reachable Redis instance (`redis:7-alpine` or any compatible server).
+Requires a reachable Redis instance (`redis:7.4.2-alpine` or any compatible server).
 
 ## Config resolution
 
@@ -192,15 +192,6 @@ proxq has no authentication of its own: no API key, bearer token, or allowlist o
 
 Job IDs are UUIDv4 (unguessable in practice) but there is **no ownership check**: anyone who can reach the instance and knows/guesses a job ID can poll or cancel it.
 
-## Management / development (operator-side, from the repo)
+## Development
 
-```bash
-make dep            # vendor dependencies
-make lint           # golangci-lint
-make test           # unit + integration tests (race detector on)
-make test-coverage  # tests with 90% coverage threshold
-make build           # docker build
-
-# e2e tests: spins up Redis + upstream + proxq via testcontainers
-cd tests && go test -v -timeout 10m ./...
-```
+Build, lint and test commands for changing proxq itself are in the repository's [AGENTS.md](https://github.com/psyb0t/docker-proxq/blob/main/AGENTS.md). This skill does not run them.

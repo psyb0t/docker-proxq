@@ -1,10 +1,7 @@
 ---
 title: "Home"
 description: "proxq is an async HTTP proxy: every request becomes a Redis-backed job, you get a job ID at once and fetch the upstream response later."
-nav_order: 1
-permalink: /
-seo:
-  type: WebSite
+slug: /
 ---
 
 # proxq

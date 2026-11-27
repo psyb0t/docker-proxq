@@ -30,7 +30,7 @@ Data flow: client -> serbewr router (request ID, logger, recovery) -> `Handler.S
 
 - Language: Go, `go 1.26.9` in `go.mod`, dependencies vendored in `vendor/`.
 - Libraries: asynq (queue), go-redis, aichteeteapee (`serbewr` server, `prawxxey` forwarding), common-go (`cache`, `slogging`, `errors`), ctxerrors, yaml.v3, openai-go v3 (client package only).
-- Image: `Dockerfile` builds a static binary on `golang:1.26.10-alpine` and runs it on `alpine:3.24` as the non-root user `proxq`, both pinned by digest.
+- Image: `Dockerfile` builds a static binary on `golang:1.26.11-alpine` and runs it on `alpine:3.24` as the non-root user `proxq`, both pinned by digest.
 - Tests: testify, testcontainers-go (Redis), `-race`.
 - Lint: golangci-lint v2 run through `go tool` (pinned in the `tool` block of `go.mod`), config in `.golangci.yml`.
 
@@ -47,11 +47,12 @@ Data flow: client -> serbewr router (request ID, logger, recovery) -> `Handler.S
 | `pkg/clients/openai/` | the OpenAI SDK client that goes through proxq |
 | `tests/` | separate Go module with end-to-end tests that build the image (not run by `make test` or CI) |
 | `config.yaml.example` | example config with every field |
-| `docs/` | the documentation site, see below |
+| `docs/` | the documentation pages, see below |
+| `website/` | the Docusaurus site that builds `docs/` |
 | `.agents/` | the agent skill (`skills/proxq/`), the Claude and Codex plugin manifests, and these rules |
 | `.github/workflows/pipeline.yml` | CI: lint, tests, govulncheck, image build, tag promotion, release, ClawHub |
 
-`docs/` is the documentation site, published by GitHub Pages from `main` at https://psyb0t.github.io/docker-proxq/ (Jekyll with the just-the-docs theme).
+`docs/` is the documentation site, published by GitHub Pages from `main` at https://psyb0t.github.io/docker-proxq/ (Docusaurus, built from `website/`).
 
 ## Commands
 
@@ -66,7 +67,7 @@ make test-coverage   # tests with the 90% coverage gate, writes coverage-percent
 make sec             # govulncheck
 make dep             # go mod tidy and go mod vendor
 make build           # docker build -t psyb0t/proxq:latest .
-make docs            # build the documentation site into .testing/docs-site
+make docs            # build the documentation site into website/build
 ```
 
 `make test` and `make test-coverage` mount the Docker socket into the Go container and use host networking, because the integration tests start Redis with testcontainers.

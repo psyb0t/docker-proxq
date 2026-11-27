@@ -1,7 +1,6 @@
 ---
 title: "Security"
 description: "What a proxq instance exposes: no built-in auth, outbound requests on the caller's behalf, unowned job IDs, trusted forwarded headers, and what to put in front."
-nav_order: 9
 ---
 
 # Security
